@@ -1,0 +1,34 @@
+# === Python Caches & Builds ===
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# PyInstaller / Executable builds
+build/
+dist/
+.e2e-runtime/
+*.spec
+
+# === C# / .NET Builds & Caches ===
+[Bb]in/
+[Oo]bj/
+WinCarePro.Desktop/bin/
+WinCarePro.Desktop/obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstate
+
+# === Virtual Environments & IDEs ===
+.venv/
+venv/
+ENV/
+.idea/
+.vscode/
+
+# === Temp Reports & Artifacts ===
+*.html
+*.log
+artifacts/

@@ -1,0 +1,8 @@
+# WinCare Pro — runtime dependencies (Python 3.11+ on Windows 11)
+# customtkinter is PINNED below 6.0: the app is built and tested against the
+# 5.2.x API line. Major CTk releases have broken apps before (see GH #764).
+customtkinter>=5.2.2,<6
+psutil>=5.9.8
+
+# Build-time only (creating the .exe). Not needed to run from source:
+# pyinstaller>=6.6

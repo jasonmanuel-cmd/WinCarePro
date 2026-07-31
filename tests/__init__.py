@@ -1,0 +1,1 @@
+"""WinCare Pro automated tests."""
