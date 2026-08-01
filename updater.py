@@ -106,3 +106,16 @@ class UpdateClient:
         if self.expected_publisher.lower() not in result.get("Subject", "").lower():
             path.unlink(missing_ok=True)
             raise ValueError("Update signer does not match the trusted publisher.")
+
+
+def install_and_relaunch(installer_path: Path) -> None:
+    """Launch a verified installer silently, then exit this process.
+
+    The installer's own post-install [Run] entry (installer/WinCarePro.iss)
+    relaunches the app once the silent install completes.
+    """
+    subprocess.Popen(
+        [str(installer_path), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+        creationflags=CREATE_NO_WINDOW,
+    )
+    raise SystemExit(0)

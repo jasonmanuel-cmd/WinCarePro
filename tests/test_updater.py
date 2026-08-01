@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from commerce import validated_checkout_url
-from updater import UpdateClient, version_tuple
+from updater import UpdateClient, install_and_relaunch, version_tuple
 
 
 class _Response:
@@ -78,6 +78,17 @@ class UpdateTests(unittest.TestCase):
                 "WinCare Pro LLC").download_and_verify(
                     manifest, str(path))
             self.assertEqual(result.read_bytes(), payload)
+
+    @mock.patch("updater.subprocess.Popen")
+    def test_install_and_relaunch_runs_silently_and_exits(self, popen):
+        installer_path = Path("C:/temp/WinCarePro-Setup-1.4.0.exe")
+        with self.assertRaises(SystemExit):
+            install_and_relaunch(installer_path)
+        args = popen.call_args[0][0]
+        self.assertEqual(args[0], str(installer_path))
+        self.assertIn("/VERYSILENT", args)
+        self.assertIn("/SUPPRESSMSGBOXES", args)
+        self.assertIn("/NORESTART", args)
 
 
 if __name__ == "__main__":

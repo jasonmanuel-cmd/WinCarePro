@@ -1,5 +1,20 @@
 # WinCarePro Release Setup
 
+## Build, package, and release
+
+The full release flow is scripted — see [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
+for the ordered steps. Summary of what each script does:
+
+- `build.ps1` — sets up `.venv`, installs pinned `requirements.txt`, runs `pytest`,
+  builds `dist\WinCarePro.exe` via `WinCarePro.spec`, and smoke-launches it.
+- `package.ps1` — signs the engine exe (if `WINCAREPRO_SIGN_CERT_THUMBPRINT` is
+  set; otherwise builds an unsigned release with a clear warning), compiles
+  `installer\WinCarePro.iss` into `dist\WinCarePro-Setup-<version>.exe` via
+  Inno Setup, signs the installer, and writes `dist\update.json`.
+- Both scripts reuse `release_tools.py` for signing (`signtool sign` with
+  RFC3161 timestamping) and manifest generation — no separate signing logic
+  lives in the PowerShell scripts.
+
 ## Checkout and licensing
 
 1. Create the WinCarePro product in Gumroad and copy its public HTTPS checkout URL.
@@ -8,17 +23,24 @@
 
 ## Secure automatic updates
 
-1. Host the signed installer or executable at a stable HTTPS URL.
+1. Host the signed installer at a stable HTTPS URL (`WINCAREPRO_DOWNLOAD_URL`
+   passed to `package.ps1`).
 2. Set `WINCAREPRO_SIGNER_SUBJECT` to the exact subject on the code-signing certificate.
-3. Sign and create the update manifest:
+3. Run `package.ps1` (see above) — it signs and writes `dist\update.json` for you.
+   To run the underlying step manually instead:
 
 ```powershell
 $env:WINCAREPRO_SIGN_CERT_THUMBPRINT = "CERTIFICATE_THUMBPRINT"
-python .\release_tools.py .\dist\WinCarePro.exe --version 1.3.0 --url "https://downloads.example.com/WinCarePro.exe"
+python .\release_tools.py .\dist\WinCarePro-Setup-1.3.0.exe --version 1.3.0 --url "https://downloads.example.com/WinCarePro-Setup-1.3.0.exe"
 ```
 
 4. Publish `dist\update.json` over HTTPS and set `WINCAREPRO_UPDATE_MANIFEST_URL` to that URL.
-5. Do not publish an unsigned build. The updater requires both the manifest SHA-256 and a valid Authenticode signature from the configured publisher.
+5. `updater.py`'s `install_and_relaunch()` runs the verified installer with
+   `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART` and exits the running app; the
+   installer's own post-install step (`installer\WinCarePro.iss`) relaunches it.
+6. Shipping unsigned is possible (`package.ps1` warns instead of failing when
+   no certificate is configured) but not recommended: the updater's
+   Authenticode check rejects unsigned or wrongly-signed updates outright.
 
 ## Clean Windows certification
 

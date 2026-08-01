@@ -53,11 +53,13 @@ def main() -> None:
     args = parser.parse_args()
     if not args.exe.is_file():
         parser.error(f"EXE not found: {args.exe}")
-    if not args.thumbprint:
-        parser.error("Set --thumbprint or WINCAREPRO_SIGN_CERT_THUMBPRINT")
-    sign(args.exe.resolve(), args.thumbprint, args.timestamp_url)
+    if args.thumbprint:
+        sign(args.exe.resolve(), args.thumbprint, args.timestamp_url)
+        print(f"Signed {args.exe}")
+    else:
+        print(f"WARNING: no --thumbprint or WINCAREPRO_SIGN_CERT_THUMBPRINT set; {args.exe} is UNSIGNED.")
     manifest(args.exe.resolve(), args.version, args.url, args.manifest.resolve())
-    print(f"Signed {args.exe} and wrote {args.manifest}")
+    print(f"Wrote {args.manifest}")
 
 
 if __name__ == "__main__":
