@@ -6,6 +6,7 @@ from performance_booster import PerformanceBooster
 
 
 class PerformanceBoosterSecurityTests(unittest.TestCase):
+    @mock.patch("performance_booster.os.name", "nt")
     @mock.patch("performance_booster.subprocess.run")
     def test_dns_adapter_name_is_escaped_and_failed_fallback_is_reported(self, run):
         adapter = "bad'; Write-Output injected; '"

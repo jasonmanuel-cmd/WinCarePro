@@ -271,20 +271,29 @@ class WindowsBaselineAnalyzer:
         if not file_path or not os.path.exists(file_path):
             return {"status": "File Not Found", "signer": "N/A", "valid": False}
 
-        ps_script = f"(Get-AuthenticodeSignature -FilePath '{file_path}') | Select-Object Status, SignerCertificate | ConvertTo-Json"
+        # SECURITY: The file path is passed as a PowerShell positional argument
+        # ($args[0]) instead of being interpolated into the script string.
+        # Interpolating a path into the script is a command-injection vector
+        # (CWE-78): a file named  foo'; Remove-Item ...  would execute.
+        # -LiteralPath + $args[0] keeps the path opaque to the parser.
+        ps_script = (
+            "$s = Get-AuthenticodeSignature -LiteralPath $args[0]; "
+            "if ($s) { [pscustomobject]@{ Status = $s.Status.ToString(); "
+            "Subject = $s.SignerCertificate.Subject } } | ConvertTo-Json -Compress"
+        )
         try:
             p = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                 "-Command", ps_script, file_path],
                 capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW
             )
             if p.returncode == 0 and p.stdout.strip():
                 data = json.loads(p.stdout)
                 status_str = str(data.get("Status", "Unknown"))
-                signer = data.get("SignerCertificate", {})
-                subject = signer.get("Subject", "Unknown") if isinstance(signer, dict) else "Unknown"
+                subject = str(data.get("Subject", "Unknown")) or "Unknown"
                 valid = status_str == "Valid" or "Valid" in status_str
                 return {"status": status_str, "signer": subject, "valid": valid}
-        except Exception as e:
+        except Exception:
             pass
 
         return {"status": "Unknown", "signer": "N/A", "valid": False}

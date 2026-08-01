@@ -39,7 +39,15 @@ class WinCareAIEngine:
             raise ValueError("Ollama URL must be a local HTTP endpoint.")
         self.ollama_url = ollama_url.rstrip("/")
         self.model_name = model_name
-        self.api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        # SECURITY: Reserved for a future cloud API path. The key is only ever
+        # read from the environment, normalized (strip + None on empty), and
+        # must be sent via an HTTPS Authorization header — never logged and
+        # never embedded in a URL query string. It is not used today.
+        self.api_key = (
+            os.environ.get("OPENROUTER_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or ""
+        ).strip() or None
 
     def is_ollama_available(self) -> bool:
         """Check if local Ollama server is responding."""

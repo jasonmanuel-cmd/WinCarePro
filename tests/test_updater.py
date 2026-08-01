@@ -61,15 +61,12 @@ class UpdateTests(unittest.TestCase):
             "WinCare Pro LLC").check("1.3.0")
         self.assertTrue(result["available"])
 
-    @mock.patch("updater.subprocess.run")
     @mock.patch("updater.urllib.request.urlopen")
-    def test_download_requires_hash_and_trusted_signature(self, urlopen, run):
+    @mock.patch("updater.UpdateClient._verify_authenticode")
+    def test_download_requires_hash_and_trusted_signature(self, verify, urlopen):
         payload = b"signed installer bytes"
         urlopen.return_value = _Response(payload)
-        run.return_value = types.SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({
-                "Status": "Valid", "Subject": "CN=WinCare Pro LLC"}))
+        verify.return_value = None
         manifest = {
             "url": "https://updates.example.com/WinCarePro.exe",
             "sha256": hashlib.sha256(payload).hexdigest(),

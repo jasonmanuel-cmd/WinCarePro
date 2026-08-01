@@ -25,6 +25,26 @@ class DiskAnalyzer:
     def __init__(self, target_drive="C:\\"):
         self.target_drive = target_drive
 
+    @staticmethod
+    def _allowed_waste_roots() -> list[str]:
+        """Exact allowlist of directories the cleaner is permitted to purge."""
+        windir = os.environ.get("WINDIR", "C:\\Windows")
+        return [
+            os.path.abspath(windir + "\\Temp").lower(),
+            os.path.abspath(os.environ.get("TEMP", "")).lower() if os.environ.get("TEMP") else "",
+            os.path.abspath(windir + "\\Prefetch").lower(),
+            os.path.abspath(windir + "\\SoftwareDistribution\\Download").lower(),
+        ]
+
+    @staticmethod
+    def _is_allowed_waste_root(path: str) -> bool:
+        """True only if path sits strictly inside one of the allowed waste roots."""
+        target = os.path.abspath(path).lower()
+        return any(
+            root and target.startswith(root + os.sep)
+            for root in DiskAnalyzer._allowed_waste_roots()
+        )
+
     def get_drive_overview(self) -> dict:
         """Return total, used, free drive space in GB and percentage."""
         try:
@@ -52,9 +72,15 @@ class DiskAnalyzer:
             if item.name in protected_folders or not item.is_dir():
                 continue
             try:
-                # Calculate folder size using PowerShell for speed
-                ps_cmd = f"(Get-ChildItem -Path '{item}' -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum"
-                p = subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, text=True, timeout=5, creationflags=CREATE_NO_WINDOW)
+                # Calculate folder size using PowerShell for speed.
+                # SECURITY: pass the path as an ARGUMENT via $args[0] and -LiteralPath
+                # instead of interpolating it into a single-quoted script string.
+                # This prevents PowerShell command injection (CWE-78): a folder name
+                # containing a single-quote would otherwise break out of the -Path
+                # argument and execute arbitrary commands. -LiteralPath is used so
+                # wildcard/metacharacters in the path are treated literally.
+                ps_cmd = "$p = $args[0]; (Get-ChildItem -LiteralPath $p -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum"
+                p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd, str(item)], capture_output=True, text=True, timeout=5, creationflags=CREATE_NO_WINDOW)
                 val = p.stdout.strip()
                 size_bytes = int(val) if val.isdigit() else 0
                 size_gb = round(size_bytes / (1024**3), 2)
@@ -147,6 +173,12 @@ class DiskAnalyzer:
             for root, dirs, files in os.walk(p):
                 for f in files:
                     fp = os.path.join(root, f)
+                    # SECURITY: refuse to delete anything that does not sit
+                    # strictly inside the allowlisted temp/update roots.
+                    if not self._is_allowed_waste_root(fp):
+                        if callback_out:
+                            callback_out(f"Safety refusal (outside allowed waste roots): {fp}")
+                        continue
                     try:
                         sz = os.path.getsize(fp)
                         os.remove(fp)

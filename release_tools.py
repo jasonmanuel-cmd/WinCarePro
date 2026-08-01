@@ -46,7 +46,10 @@ def main() -> None:
     parser.add_argument("--url", required=True)
     parser.add_argument("--manifest", type=Path, default=Path("dist/update.json"))
     parser.add_argument("--thumbprint", default=os.environ.get("WINCAREPRO_SIGN_CERT_THUMBPRINT"))
-    parser.add_argument("--timestamp-url", default="http://timestamp.digicert.com")
+    # SECURITY: Timestamp Authority over HTTPS only. A cleartext HTTP timestamp
+    # URL (CWE-319) allows an on-path attacker to strip or swap the signature's
+    # timestamp, weakening the code-signing validity period.
+    parser.add_argument("--timestamp-url", default="https://timestamp.digicert.com")
     args = parser.parse_args()
     if not args.exe.is_file():
         parser.error(f"EXE not found: {args.exe}")

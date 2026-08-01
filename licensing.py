@@ -19,6 +19,22 @@ from pathlib import Path
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "WinCarePro"
 LICENSE_FILE = APP_DIR / "license.dat"
 
+# ---------------------------------------------------------------------------
+# SECURITY: Local license signing secret.
+# The signing secret is supplied by the operator at build/install time via the
+# environment. It is NEVER hardcoded in source code (a hardcoded MAC key is
+# forgeable by anyone with the binary or repo access).
+# If the secret is absent or too short, license verification FAILS CLOSED:
+# stored licenses are not trusted and the app stays on the Free tier.
+# ---------------------------------------------------------------------------
+LICENSE_SIGNING_SECRET = os.environ.get("WINCAREPRO_LICENSE_SECRET", "")
+MIN_LICENSE_SECRET_LEN = 32
+
+
+def _signing_configured() -> bool:
+    """True only when a sufficiently strong signing secret is configured."""
+    return len(LICENSE_SIGNING_SECRET) >= MIN_LICENSE_SECRET_LEN
+
 
 class LicenseManager:
     """
@@ -33,19 +49,40 @@ class LicenseManager:
         self.license_info = self._load_license()
 
     def _get_machine_guid(self) -> str:
-        """Fetch unique hardware MachineGuid to bind local license signature."""
+        """
+        Fetch unique hardware MachineGuid to bind the local license signature.
+
+        SECURITY: Fails CLOSED. On any read failure we return an empty string
+        instead of a shared fallback GUID. A shared fallback GUID would let the
+        same license signature validate on every machine that failed the read,
+        enabling cross-machine license sharing (see security/17-security-pattern.md §11.1).
+        """
         try:
             import winreg
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as k:
                 val, _ = winreg.QueryValueEx(k, "MachineGuid")
-                return str(val).strip()
+                guid = str(val).strip()
+                if not guid:
+                    raise ValueError("MachineGuid is empty")
+                return guid
         except Exception:
-            return "WINCARE_PRO_DEFAULT_HWGUID"
+            return ""
 
     def _compute_signature(self, key: str, email: str) -> str:
-        """Compute SHA256 signature tied to hardware GUID and secret key."""
+        """
+        Compute SHA256 signature tied to hardware GUID and the signing secret.
+
+        SECURITY: The secret comes from the WINCAREPRO_LICENSE_SECRET environment
+        variable, never from source. If no secret is configured, or no unique
+        hardware GUID is available, signing is refused (returns "") so that
+        license verification fails closed (§11.1).
+        """
+        if not _signing_configured():
+            return ""
         hw_id = self._get_machine_guid()
-        raw = f"{key.strip().upper()}:{email.strip().lower()}:{hw_id}:WINCARE_PRO_SECRET_v1.3"
+        if not hw_id:
+            return ""
+        raw = f"{key.strip().upper()}:{email.strip().lower()}:{hw_id}:{LICENSE_SIGNING_SECRET}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def _load_license(self) -> dict:
@@ -58,7 +95,9 @@ class LicenseManager:
                 key = data.get("key", "")
                 email = data.get("email", "")
                 sig = data.get("signature", "")
-                if data.get("activated") and sig == self._compute_signature(key, email):
+                # Fail closed: a non-empty signature that matches a computed
+                # signature produced with the configured secret + hardware GUID.
+                if data.get("activated") and sig and sig == self._compute_signature(key, email):
                     return data
         except Exception:
             pass
@@ -124,8 +163,14 @@ class LicenseManager:
                     data = json.loads(resp.read().decode("utf-8"))
                     if data.get("success"):
                         buyer_email = data.get("purchase", {}).get("email", email)
-                        self._save_license(clean_key, buyer_email, tier="Pro")
-                        return True, "License successfully verified and activated online!"
+                        if self._save_license(clean_key, buyer_email, tier="Pro"):
+                            return True, "License successfully verified and activated online!"
+                        # Fail closed: Gumroad validated the key, but we could not
+                        # persist it securely (e.g. signing secret not configured).
+                        return False, (
+                            "License was verified, but activation could not be saved "
+                            "securely on this machine (signing secret not configured)."
+                        )
         except Exception:
             pass  # Offline or Gumroad API unreachable
 

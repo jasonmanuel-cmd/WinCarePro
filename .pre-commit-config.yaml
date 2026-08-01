@@ -1,0 +1,34 @@
+# Pre-commit hooks for WinCarePro — run quality gates before every commit.
+# Install: `pip install pre-commit && pre-commit install`
+# Bypass (emergency only): `git commit --no-verify`
+repos:
+  - repo: local
+    hooks:
+      - id: py-compile
+        name: Verify Python files compile
+        entry: python -m py_compile
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      - id: bandit
+        name: Bandit security scan (moderate+ severity)
+        entry: bandit
+        language: system
+        args: ["-r", ".", "-ll", "-f", "txt", "--exclude", "build,dist,.venv,tests"]
+        types: [python]
+        pass_filenames: false
+
+      - id: safety
+        name: Safety dependency check
+        entry: safety
+        language: system
+        args: ["check", "--full-report"]
+        pass_filenames: false
+
+      - id: pytest
+        name: Run test suite (smoke)
+        entry: pytest
+        language: system
+        args: ["tests/", "-q", "--tb=short"]
+        pass_filenames: false

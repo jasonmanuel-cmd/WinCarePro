@@ -9,6 +9,7 @@ build/
 dist/
 .e2e-runtime/
 *.spec
+!WinCarePro.spec
 
 # === C# / .NET Builds & Caches ===
 [Bb]in/
@@ -31,4 +32,4 @@ ENV/
 # === Temp Reports & Artifacts ===
 *.html
 *.log
-artifacts/
+# artifacts/ removed — PoC scripts moved to tests/ and images deleted

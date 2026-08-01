@@ -12,6 +12,7 @@
 import os
 import sys
 import shutil
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -113,8 +114,10 @@ class DeepUninstaller:
             if callback_out:
                 callback_out(f"Launching uninstaller for {app_info['name']}...")
 
-            # Run uninstaller process
-            p = subprocess.run(cmd_str, shell=False, timeout=120,
+            # Run uninstaller process — split the command string into a list
+            # for proper argument handling (spaces in paths, etc.).
+            uninstall_args = shlex.split(cmd_str)
+            p = subprocess.run(uninstall_args, shell=False, timeout=120,
                                creationflags=CREATE_NO_WINDOW)
             if p.returncode in (0, 3010):  # 0 = success, 3010 = reboot required
                 return True, f"Successfully uninstalled {app_info['name']}."
@@ -147,11 +150,36 @@ class DeepUninstaller:
 
         return leftovers
 
+    @staticmethod
+    def _safe_shred_roots() -> set[str]:
+        """Return the only roots we ever allow recursive deletion under."""
+        roots = {
+            os.environ.get("APPDATA"),
+            os.environ.get("LOCALAPPDATA"),
+            os.environ.get("PROGRAMDATA"),
+        }
+        return {os.path.abspath(r).lower() for r in roots if r}
+
+    @staticmethod
+    def _inside_safe_root(path: str) -> bool:
+        """True only if path sits strictly below one of the safe roots."""
+        target = os.path.abspath(path).lower()
+        return any(
+            target.startswith(root + os.sep)
+            for root in DeepUninstaller._safe_shred_roots()
+        )
+
     def shred_leftovers(self, leftovers: dict, callback_out=None) -> tuple[bool, str]:
         """Delete identified leftover folders and keys."""
         deleted_count = 0
         for folder in leftovers.get("folders", []):
             try:
+                if not self._inside_safe_root(folder):
+                    if callback_out:
+                        callback_out(
+                            f"Safety refusal (outside allowed AppData roots): {folder}"
+                        )
+                    continue
                 if os.path.exists(folder):
                     shutil.rmtree(folder)
                     if not os.path.exists(folder):

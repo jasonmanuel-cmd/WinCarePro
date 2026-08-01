@@ -316,7 +316,10 @@ def get_folder_stats(folder_path: str) -> tuple[int, int, str]:
     except Exception:
         pass
 
-    dt_str = datetime.datetime.fromtimestamp(latest_mtime).strftime("%Y-%m-%d %H:%M:%S") if latest_mtime else "Unknown"
+    try:
+        dt_str = datetime.datetime.fromtimestamp(latest_mtime).strftime("%Y-%m-%d %H:%M:%S") if latest_mtime else "Unknown"
+    except (ValueError, OSError, OverflowError):
+        dt_str = "Unknown"
     return total_bytes, file_count, dt_str
 
 

@@ -18,9 +18,13 @@ import json
 import ctypes
 from ctypes import wintypes
 import subprocess
-import winreg
 import psutil
 from typing import Callable, Optional, Tuple, Dict, Any, List
+
+try:
+    import winreg
+except ImportError:
+    winreg = None
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 

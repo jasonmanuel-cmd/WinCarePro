@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pyinstaller bandit safety
+
+      - name: Verify PyInstaller build
+        run: python -m PyInstaller --clean --noconfirm WinCarePro.spec
+
+      - name: Lint with py_compile
+        run: |
+          $files = Get-ChildItem -Recurse -Filter "*.py" | Where-Object {
+            $_.FullName -notmatch '\\build\\' -and
+            $_.FullName -notmatch '\\dist\\' -and
+            $_.FullName -notmatch '\\.venv\\'
+          }
+          foreach ($f in $files) {
+            python -m py_compile $f.FullName
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          Write-Host "All files compile cleanly."
+        shell: powershell
+
+      - name: Run security scanner (bandit)
+        run: bandit -r . -f json -o bandit-report.json --exclude build,dist,.venv || true
+
+      - name: Run dependency audit (safety)
+        run: safety check --full-report || true
+
+      - name: Run test suite
+        run: pytest tests/ -v --tb=short --cov=. --cov-report=term-missing
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wincarepro-build
+          path: |
+            dist/WinCarePro.exe
+            bandit-report.json
+            coverage.xml
+          retention-days: 30
+
+      - name: Upload code coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+  e2e:
+    runs-on: windows-latest
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r tests/e2e/requirements.txt
+
+      - name: Build WPF desktop app
+        run: dotnet build WinCarePro.Desktop.csproj -c Release
+
+      - name: Run E2E tests
+        run: |
+          pip install pywinauto==0.6.9 Pillow==12.1.0 pytest-html==4.1.1 pytest-timeout==2.3.1
+          pytest tests/e2e/ -v --tb=short -m e2e --html=e2e-report.html

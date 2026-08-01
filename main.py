@@ -66,6 +66,7 @@ from wincare_tray import WinCareTrayWorker
 from auto_repair import AutoRepairEngine
 from commerce import open_checkout
 from updater import UpdateClient
+from security_scanner import SecurityScanner
 
 # winreg only exists on Windows; keep the module importable elsewhere so the
 # file can be linted / unit-tested on non-Windows CI boxes.
@@ -140,10 +141,13 @@ def is_admin() -> bool:
 def relaunch_as_admin() -> bool:
     """Re-launch this script/exe elevated via UAC. Returns True on success."""
     try:
-        params = " ".join(f'"{a}"' for a in sys.argv[1:])
-        # When frozen by PyInstaller, sys.executable IS the exe.
         target = sys.executable
-        args = params if getattr(sys, "frozen", False) else f'"{os.path.abspath(sys.argv[0])}" {params}'
+        if getattr(sys, "frozen", False):
+            args = subprocess.list2cmdline(sys.argv[1:])
+        else:
+            args = subprocess.list2cmdline(
+                [os.path.abspath(sys.argv[0])] + sys.argv[1:]
+            )
         rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", target, args, None, 1)
         return rc > 32
     except Exception:
@@ -164,7 +168,7 @@ def run_cmd(cmd, timeout=120):
         out = (p.stdout or "") + (("\n" + p.stderr) if p.stderr else "")
         return p.returncode, out.replace("\x00", "").strip()
     except subprocess.TimeoutExpired:
-        return -1, f"[timeout after {timeout}s] {cmd}"
+        return -1, f"[timeout after {timeout}s]"
     except Exception as e:
         return -2, f"[error] {e}"
 
@@ -465,7 +469,16 @@ class SysInfo:
 
     @staticmethod
     def uptime_str() -> str:
-        secs = int(time.time() - psutil.boot_time())
+        try:
+            b_time = psutil.boot_time()
+            if b_time > 0:
+                secs = int(time.time() - b_time)
+                if secs < 0:
+                    secs = 0
+            else:
+                secs = 0
+        except Exception:
+            secs = 0
         d, rem = divmod(secs, 86400)
         h, rem = divmod(rem, 3600)
         m = rem // 60
@@ -479,6 +492,14 @@ class SysInfo:
             du = psutil.disk_usage(os.environ.get("SystemDrive", "C:") + "\\")
         except OSError:
             du = None
+        boot_time_str = "Unknown"
+        try:
+            b_time = psutil.boot_time()
+            if b_time > 0:
+                from datetime import datetime as dt
+                boot_time_str = dt.fromtimestamp(b_time).strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            pass
         return {
             "os": SysInfo.windows_edition(),
             "hostname": platform.node(),
@@ -491,8 +512,7 @@ class SysInfo:
             "disk_free": human_bytes(du.free) if du else "-",
             "disk_free_pct": round(100 - du.percent, 1) if du else 0,
             "uptime": SysInfo.uptime_str(),
-            "boot_time": datetime.fromtimestamp(psutil.boot_time())
-                                 .strftime("%Y-%m-%d %H:%M"),
+            "boot_time": boot_time_str,
         }
 
 
@@ -2577,6 +2597,7 @@ class WinCareApp(ctk.CTk):
         self.deep_uninstaller = DeepUninstaller()
         self.file_cleaner = FileCleaner()
         self.rollback_engine = RollbackEngine()
+        self.security_scanner = SecurityScanner(self.logger)
         self.tray_worker = WinCareTrayWorker()
         self.admin = is_admin()
 
@@ -4310,9 +4331,11 @@ class WinCareApp(ctk.CTk):
         tabs.add("Processes")
         tabs.add("Cleanup")
         tabs.add("Old & Duplicate Files")
+        tabs.add("Security Scanner")
         self._build_proc_tab(tabs.tab("Processes"))
         self._build_clean_tab(tabs.tab("Cleanup"))
         self._build_file_finder_tab(tabs.tab("Old & Duplicate Files"))
+        self._build_security_scanner_tab(tabs.tab("Security Scanner"))
 
     # ---- process manager ---------------------------------------------------
     def _build_proc_tab(self, tab):
@@ -4394,6 +4417,177 @@ class WinCareApp(ctk.CTk):
             return pid, name, path
         except (ValueError, tk.TclError):
             return None
+
+    # ---- security scanner tab ----------------------------------------------
+    def _build_security_scanner_tab(self, tab):
+        bar = ctk.CTkFrame(tab, fg_color="transparent")
+        bar.pack(fill="x", pady=(4, 6))
+
+        self.security_scan_btn = ctk.CTkButton(
+            bar, text="↻ Scan Threats", width=120,
+            command=self._run_security_scan
+        )
+        self.security_scan_btn.pack(side="left")
+
+        self.security_kill_btn = ctk.CTkButton(
+            bar, text="■ Terminate/Remedy Threat", width=160,
+            fg_color="#C0392B", hover_color="#96281B",
+            command=self._remedy_selected_threat
+        )
+        self.security_kill_btn.pack(side="left", padx=6)
+
+        self.security_score_label = ctk.CTkLabel(
+            bar, text="Security Score: 100/100", font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#2ECC71"
+        )
+        self.security_score_label.pack(side="right", padx=(10, 0))
+
+        self.security_status_label = ctk.CTkLabel(
+            tab, text="Click 'Scan Threats' to start auditing background threats...",
+            text_color="gray55", anchor="w"
+        )
+        self.security_status_label.pack(fill="x", pady=(0, 6))
+
+        cols = ("Type", "Category", "Target Name", "PID/Location", "Risk Description", "Recommended Action")
+        frame, self.security_tree = styled_treeview(
+            tab, cols, (80, 150, 140, 160, 240, 180), stretch_col="Risk Description"
+        )
+        frame.pack(fill="both", expand=True)
+
+        self.security_tree.tag_configure("critical", foreground="#E5484D")
+        self.security_tree.tag_configure("warning", foreground="#F5A524")
+
+        for c in cols:
+            self.security_tree.heading(
+                c, text=c, command=lambda cc=c: sort_treeview(
+                    self.security_tree, cc, numeric=cc == "PID/Location"
+                )
+            )
+
+        ctk.CTkLabel(
+            tab, text="Red = Critical anomalies (masquerading, deceptive naming). "
+                      "Orange = Warning anomalies (unsigned user-space binaries with active connections or scheduled persistence startup keys).",
+            text_color="gray55", font=ctk.CTkFont(size=11)
+        ).pack(anchor="w", pady=(4, 0))
+
+    def _run_security_scan(self):
+        """Runs the security threat suite in the background."""
+        self.security_scan_btn.configure(state="disabled", text="Scanning...")
+        self.security_status_label.configure(text="Scrutinizing background threats...")
+
+        def work():
+            return self.security_scanner.run_security_suite()
+
+        def done(result):
+            self.security_scan_btn.configure(state="normal", text="↻ Scan Threats")
+            if isinstance(result, Exception):
+                self.security_status_label.configure(text=f"Scan failed: {result}")
+                return
+
+            for item in self.security_tree.get_children():
+                self.security_tree.delete(item)
+
+            score = result["score"]
+            color = "#2ECC71"
+            if score < 60:
+                color = "#E5484D"
+            elif score < 90:
+                color = "#F5A524"
+
+            self.security_score_label.configure(
+                text=f"Security Score: {score}/100",
+                text_color=color
+            )
+
+            all_threats = result["proc_threats"] + result["startup_threats"]
+            for f in all_threats:
+                tag = "warning" if f.get("type") == "Warning" else "critical"
+                pid_loc = f.get("pid", "") if "pid" in f else f.get("location", "")
+                self.security_tree.insert(
+                    "", "end",
+                    values=(
+                        f.get("type", "Warning"),
+                        f.get("category", "Unknown"),
+                        f.get("name", "N/A"),
+                        pid_loc,
+                        f.get("details", ""),
+                        f.get("action", "")
+                    ),
+                    tags=(tag,)
+                )
+
+            if len(all_threats) == 0:
+                self.security_status_label.configure(text="Scan complete. No suspicious background processes detected!")
+            else:
+                self.security_status_label.configure(text=f"Scan complete. Found {len(all_threats)} potential threat indicators!")
+
+        self.run_bg(work, done)
+
+    def _remedy_selected_threat(self):
+        sel = self.security_tree.selection()
+        if not sel:
+            self.notify("No selection", "Select a security threat from the table first.")
+            return
+
+        cols = ("Type", "Category", "Target Name", "PID/Location", "Risk Description", "Recommended Action")
+        vals = [self.security_tree.set(sel[0], c) for c in cols]
+        t_type, category, name, pid_loc, desc, action = vals
+
+        try:
+            pid = int(pid_loc)
+            if pid in (0, 4):
+                self.notify("Access Denied", "System Core Process cannot be ended.")
+                return
+
+            if not self.confirm(
+                "Remedy Threat",
+                f"Are you sure you want to terminate threat process '{name}' (PID {pid})?\n"
+                f"Description: {desc}",
+                confirm_text="Terminate Process", danger=True
+            ):
+                return
+
+            p = psutil.Process(pid)
+            p.terminate()
+            try:
+                p.wait(timeout=3)
+            except psutil.TimeoutExpired:
+                p.kill()
+
+            self.logger.log("Threat terminated", f"{name} pid={pid} category={category}")
+            self.notify("Threat terminated", f"Process '{name}' was successfully terminated!")
+            self._run_security_scan()
+
+        except ValueError:
+            if "\\" in pid_loc and winreg is not None:
+                hive_str, subkey = pid_loc.split("\\", 1)
+                hkey = winreg.HKEY_LOCAL_MACHINE if hive_str == "HKLM" else winreg.HKEY_CURRENT_USER
+
+                if not self.confirm(
+                    "Delete Startup Persistence",
+                    f"Remove persistent startup entry '{name}' from registry?\n"
+                    f"Command: {desc}",
+                    confirm_text="Delete Registry Key", danger=True
+                ):
+                    return
+
+                try:
+                    key = winreg.OpenKey(hkey, subkey, 0, winreg.KEY_SET_VALUE)
+                    winreg.DeleteValue(key, name)
+                    winreg.CloseKey(key)
+
+                    self.logger.log("Startup threat removed", f"registry name={name}")
+                    self.notify("Success", f"Startup entry '{name}' was successfully deleted from {hive_str} registry.")
+                    self._run_security_scan()
+                except Exception as e:
+                    self.notify("Error", f"Failed to delete registry key: {e}")
+            else:
+                self.notify("Action Unavailable", "This item has no direct automatic termination path.")
+        except psutil.NoSuchProcess:
+            self.notify("Threat Gone", "The threat process has already exited.")
+            self._run_security_scan()
+        except psutil.AccessDenied:
+            self.notify("Access Denied", "WinCare Pro does not have permission to terminate this process.")
 
     def _end_task(self):
         picked = self._selected_process()
@@ -5322,13 +5516,46 @@ def _single_instance_or_die():
     """Refuse to run twice — two instances deleting files concurrently is
     exactly the kind of race a maintenance tool must never allow."""
     try:
-        ctypes.windll.kernel32.CreateMutexW(None, False, "WinCareProMutex_v1")
-        if ctypes.windll.kernel32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
-            from tkinter import messagebox
-            r = tk.Tk(); r.withdraw()
-            messagebox.showwarning(APP_NAME,
-                                   "WinCare Pro is already running.")
-            r.destroy()
+        kernel32 = ctypes.windll.kernel32
+        # CreateMutexW returns a handle; GetLastError must be checked
+        # immediately — before any other Win32 call (including Python's
+        # internal SetLastError resets) — otherwise the error code is stale
+        # and we get false "already running" detections.
+        mutex_name = "Local\\" + "WinCareProSingletonMutex_v1"
+        handle = kernel32.CreateMutexW(None, False, mutex_name)
+        error = kernel32.GetLastError()
+        # Keep the handle alive for the lifetime of the process so the
+        # mutex is not released when the handle is garbage collected.
+        _mutex_handle = handle
+        if error == 183:   # ERROR_ALREADY_EXISTS
+            try:
+                user32 = ctypes.windll.user32
+                hwnd_holder = {"hwnd": None}
+
+                @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+                def enum_windows_proc(hwnd, _lparam):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length <= 0:
+                        return True
+                    buffer = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buffer, length + 1)
+                    title = buffer.value
+                    if APP_NAME in title:
+                        hwnd_holder["hwnd"] = hwnd
+                        return False
+                    return True
+
+                user32.EnumWindows(enum_windows_proc, 0)
+                hwnd = hwnd_holder["hwnd"]
+                if hwnd:
+                    user32.ShowWindow(hwnd, 9)
+                    user32.SetForegroundWindow(hwnd)
+            except Exception:
+                from tkinter import messagebox
+                r = tk.Tk(); r.withdraw()
+                messagebox.showwarning(APP_NAME,
+                                       "WinCare Pro is already running.")
+                r.destroy()
             sys.exit(0)
     except AttributeError:
         pass  # non-Windows lint runs

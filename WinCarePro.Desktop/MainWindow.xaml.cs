@@ -17,22 +17,37 @@ public partial class MainWindow : Window
         ScanCommand = new RelayCommand(LaunchLegacy);
         DataContext = this;
         InitializeComponent();
+        UpdatePreviewStatus();
     }
 
     private void ShowDashboard(object sender, RoutedEventArgs e) => StatusText.Text = "Dashboard ready.";
     private void OpenLegacy(object sender, RoutedEventArgs e) => LaunchLegacy();
 
-    private void LaunchLegacy()
+    private static string? ResolveLegacyEnginePath()
     {
         var candidates = new[]
         {
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "dist", "WinCarePro.exe")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "dist", "WinCarePro.exe")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "WinCarePro.exe")),
             Path.Combine(AppContext.BaseDirectory, "WinCarePro.exe")
         };
-        var exe = Array.Find(candidates, File.Exists);
+
+        return Array.Find(candidates, File.Exists);
+    }
+
+    private void UpdatePreviewStatus()
+    {
+        StatusText.Text = ResolveLegacyEnginePath() is null
+            ? "Production engine preview not found. Build dist/WinCarePro.exe or run run.bat first."
+            : "Production engine preview ready. Open the full engine when you need it.";
+    }
+
+    private void LaunchLegacy()
+    {
+        var exe = ResolveLegacyEnginePath();
         if (exe is null)
         {
-            StatusText.Text = "The production engine was not found beside this preview.";
+            StatusText.Text = "Production engine preview not found. Build dist/WinCarePro.exe or run run.bat first.";
             return;
         }
         Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
