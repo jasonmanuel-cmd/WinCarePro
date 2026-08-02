@@ -9,7 +9,7 @@ The product is commercially ready only when all ten gates pass on the release ar
 | 2 | Data safety | Empty/corrupt/boundary tests, atomic state writes, retention limits, sensitive-detail redaction | PASS locally |
 | 3 | Action safety | Explicit approval, separate destructive approval, verified rollback protection, fail-closed handlers | PASS for automated flows and isolated real HKCU mutation/rollback; production-action VM matrix pending |
 | 4 | Security | Medium/high Bandit scan, dependency audit, secret review, fixed-command bridge validation | PASS locally |
-| 5 | Accessibility | Keyboard, focus, names, roles, values, live regions, high contrast, screen reader on release artifact | BLOCKED: clean-VM UI Automation evidence missing |
+| 5 | Accessibility | Keyboard, focus, names, roles, values, live regions, high contrast, screen reader on release artifact | Static XAML contract PASS; BLOCKED on clean-VM UI Automation evidence |
 | 6 | Build reproducibility | Pinned dependencies, full build, release hash, packaged launch | PASS on development PC; independent clean build pending |
 | 7 | Installation lifecycle | Clean Windows 11 install, launch, upgrade, uninstall, and residue inspection | PENDING clean VM |
 | 8 | Publisher trust | Valid Authenticode chain and expected publisher on engine and installer | BLOCKED: certificate not configured |
