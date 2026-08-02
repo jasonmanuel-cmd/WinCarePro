@@ -11,10 +11,9 @@
 
 import os
 import shutil
-import subprocess
 from pathlib import Path
 
-from core.platform import get_system_temp_roots, get_windir
+from core.platform import get_system_temp_roots
 from core.shell import safe_ps
 
 
@@ -81,8 +80,8 @@ class DiskAnalyzer:
                 # argument and execute arbitrary commands. -LiteralPath is used so
                 # wildcard/metacharacters in the path are treated literally.
                 ps_cmd = "$p = $args[0]; (Get-ChildItem -LiteralPath $p -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum"
-                p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd, str(item)], capture_output=True, text=True, timeout=5, creationflags=CREATE_NO_WINDOW)
-                val = p.stdout.strip()
+                code, output = safe_ps(ps_cmd, str(item), timeout=5)
+                val = output.strip() if code == 0 else ""
                 size_bytes = int(val) if val.isdigit() else 0
                 size_gb = round(size_bytes / (1024**3), 2)
                 if size_gb > 0.1:

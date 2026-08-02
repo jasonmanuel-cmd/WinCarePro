@@ -12,13 +12,12 @@ Python 3.11+ · CustomTkinter (dark UI, blue accents) · psutil · Local AI / Ru
 
 ---
 
-## 🚀 Quick Start with `.bat` Launcher
+## 🚀 Quick Start
 
-Simply double-click **`run.bat`**:
-* Auto-checks Python and required packages (`requirements.txt`).
-* Auto-elevates to Administrator via UAC prompt for full system maintenance privileges.
-* Launches WinCare Pro cleanly.
-* Optional: Double-click **`create_shortcut.bat`** to create a **"WinCare Pro"** shortcut on your Desktop!
+After running `build.ps1` once, double-click **`WinCarePro.vbs`** for a terminal-free
+launch. `run.bat` delegates immediately to the same windowless launcher for
+existing shortcuts. Windows may show one normal UAC consent prompt; no package
+installation or terminal session runs during application startup.
 
 ---
 

@@ -391,6 +391,7 @@ public partial class MainWindow : Window
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
         };
         startInfo.ArgumentList.Add(bridge.ScriptPath);
         startInfo.ArgumentList.Add(command);
