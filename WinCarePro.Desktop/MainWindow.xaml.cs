@@ -255,7 +255,10 @@ public partial class MainWindow : Window
         {
             var detail = item.GetProperty("detail");
             var detailStatus = detail.TryGetProperty("status", out var status) ? $" · {status.GetString()}" : string.Empty;
-            return $"{item.GetProperty("at").GetString()} · {item.GetProperty("event").GetString()}{detailStatus}";
+            var decision = detail.TryGetProperty("decision", out var experimentDecision)
+                ? $" · {experimentDecision.GetString()}"
+                : string.Empty;
+            return $"{item.GetProperty("at").GetString()} · {item.GetProperty("event").GetString()}{detailStatus}{decision}";
         }).ToArray();
 
         SetAccessibleList(ProofTimelineList, "Proof and activity timeline", events.Length == 0

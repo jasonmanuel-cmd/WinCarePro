@@ -5,6 +5,7 @@ import pytest
 
 from guided_care import (
     CareAction,
+    CareExperiment,
     CareOutcome,
     CarePlanner,
     CareProfiles,
@@ -140,6 +141,56 @@ def test_change_receipt_contains_proof_and_rollback_protection():
     assert receipt["protection"] == ["Startup entry saved", "One-click undo"]
     assert receipt["reversible"] is True
     json.dumps(receipt)
+
+
+def test_experiment_keeps_only_a_verified_improvement(tmp_path):
+    store = CareStore(tmp_path)
+    action = CareAction("startup_pause", "Pause startup item", "Startup became slower.", "Warning")
+
+    receipt = CareExperiment(store).run(
+        action, approved=True, protection=("Startup entry saved",),
+        before={"startup_seconds": 61}, metric="startup_seconds",
+        execute=lambda: {"ok": True}, measure=lambda: {"startup_seconds": 44},
+        revert=lambda: {"ok": True}, higher_is_better=False,
+    )
+
+    assert receipt["decision"] == "kept"
+    assert [event["event"] for event in store.timeline()] == [
+        "experiment_proposed", "experiment_approved", "experiment_protected",
+        "experiment_started", "experiment_kept",
+    ]
+
+
+def test_experiment_fails_closed_without_approval_or_rollback(tmp_path):
+    action = CareAction("startup_pause", "Pause startup item", "Startup became slower.", "Warning")
+    called = []
+
+    denied = CareExperiment(CareStore(tmp_path / "denied")).run(
+        action, approved=False, protection=(), before={"value": 1}, metric="value",
+        execute=lambda: called.append("execute") or {"ok": True}, measure=lambda: {"value": 2}, revert=None,
+    )
+    blocked = CareExperiment(CareStore(tmp_path / "blocked")).run(
+        action, approved=True, protection=(), before={"value": 1}, metric="value",
+        execute=lambda: called.append("execute") or {"ok": True}, measure=lambda: {"value": 2}, revert=None,
+    )
+
+    assert denied["decision"] == "denied"
+    assert blocked["decision"] == "blocked"
+    assert called == []
+
+
+def test_experiment_reverts_when_proof_threshold_is_not_met(tmp_path):
+    reverted = []
+    receipt = CareExperiment(CareStore(tmp_path)).run(
+        CareAction("startup_pause", "Pause startup item", "Slow startup", "Warning"),
+        approved=True, protection=("Saved",), before={"seconds": 61}, metric="seconds",
+        execute=lambda: {"ok": True}, measure=lambda: {"seconds": 58},
+        revert=lambda: reverted.append(True) or {"ok": True, "message": "Restored"},
+        higher_is_better=False,
+    )
+
+    assert receipt["decision"] == "reverted"
+    assert reverted == [True]
 
 
 def test_executor_denies_unapproved_actions_and_records_the_event(tmp_path):

@@ -341,6 +341,87 @@ class ChangeReceipt:
         }
 
 
+class CareExperiment:
+    """Run one injected action only when approval, protection, and proof are present."""
+
+    def __init__(self, store: CareStore) -> None:
+        self.store = store
+
+    def run(
+        self,
+        action: CareAction,
+        *,
+        approved: bool,
+        protection: Sequence[str],
+        before: Mapping[str, Any],
+        metric: str,
+        execute: Callable[[], Mapping[str, Any]],
+        measure: Callable[[], Mapping[str, Any]],
+        revert: Callable[[], Mapping[str, Any]] | None,
+        target_delta: float = 10,
+        higher_is_better: bool = True,
+    ) -> dict[str, Any]:
+        self._event("experiment_proposed", action)
+        if not approved:
+            return self._finish(action, "denied", "Explicit approval is required.", protection)
+        self._event("experiment_approved", action)
+        if action.reversible and (not protection or revert is None):
+            return self._finish(action, "blocked", "Verified rollback protection is required.", protection)
+        self._event("experiment_protected", action, {"protection": list(protection)})
+        self._event("experiment_started", action)
+        try:
+            execution = dict(execute() or {})
+        except Exception as exc:
+            return self._finish(action, "failed", str(exc) or "The action failed.", protection)
+        if not execution.get("ok"):
+            return self._finish(action, "failed", str(execution.get("message", "The action failed.")), protection)
+
+        try:
+            after = dict(measure() or {})
+        except Exception as exc:
+            return self._revert(action, protection, revert, f"Measurement failed: {exc}")
+        proof = ProofEngine().compare(
+            action.action_id, before, after, metric,
+            target_delta=target_delta, higher_is_better=higher_is_better,
+        )
+        if proof.status == "verified":
+            receipt = ChangeReceipt().create(action, proof, protection=protection) | {"decision": "kept"}
+            self.store.append_event("experiment_kept", receipt)
+            return receipt
+        return self._revert(action, protection, revert, proof.message, proof)
+
+    def _revert(
+        self,
+        action: CareAction,
+        protection: Sequence[str],
+        revert: Callable[[], Mapping[str, Any]] | None,
+        reason: str,
+        proof: CareOutcome | None = None,
+    ) -> dict[str, Any]:
+        try:
+            result = dict(revert() or {}) if revert else {"ok": False}
+        except Exception as exc:
+            result = {"ok": False, "message": str(exc)}
+        status = "reverted" if result.get("ok") else "rollback_failed"
+        evidence = proof or CareOutcome(action.action_id, action.title, "failed", reason)
+        receipt = ChangeReceipt().create(action, evidence, protection=protection) | {
+            "decision": status,
+            "rollback_message": str(result.get("message", reason)),
+        }
+        self.store.append_event(f"experiment_{status}", receipt)
+        return receipt
+
+    def _finish(self, action: CareAction, status: str, message: str, protection: Sequence[str]) -> dict[str, Any]:
+        receipt = ChangeReceipt().create(
+            action, CareOutcome(action.action_id, action.title, status, message), protection=protection,
+        ) | {"decision": status}
+        self.store.append_event(f"experiment_{status}", receipt)
+        return receipt
+
+    def _event(self, event: str, action: CareAction, detail: Mapping[str, Any] | None = None) -> None:
+        self.store.append_event(event, {"action_id": action.action_id, **(detail or {})})
+
+
 @dataclass(frozen=True)
 class CareProfile:
     profile_id: str
