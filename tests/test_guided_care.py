@@ -193,6 +193,22 @@ def test_experiment_reverts_when_proof_threshold_is_not_met(tmp_path):
     assert reverted == [True]
 
 
+def test_experiment_records_failed_rollback_after_measurement_error(tmp_path):
+    def measurement_failed():
+        raise RuntimeError("sensor unavailable")
+
+    receipt = CareExperiment(CareStore(tmp_path)).run(
+        CareAction("startup_pause", "Pause startup item", "Slow startup", "Warning"),
+        approved=True, protection=("Saved",), before={"seconds": 61}, metric="seconds",
+        execute=lambda: {"ok": True}, measure=measurement_failed,
+        revert=lambda: {"ok": False, "message": "Restore verification failed"},
+        higher_is_better=False,
+    )
+
+    assert receipt["decision"] == "rollback_failed"
+    assert receipt["rollback_message"] == "Restore verification failed"
+
+
 def test_executor_denies_unapproved_actions_and_records_the_event(tmp_path):
     store = CareStore(tmp_path)
     action = CareAction("cleanup_temp_files", "Clean temporary files", "Low disk", "Critical")

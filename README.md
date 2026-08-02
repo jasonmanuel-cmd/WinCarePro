@@ -8,6 +8,7 @@ Python 3.11+ · CustomTkinter (dark UI, blue accents) · psutil · Local AI / Ru
 > Runs on earlier builds with a warning.
 >
 > Release signing, checkout, secure updates, clean-VM testing, and the accessible WPF interface are documented in [RELEASE_SETUP.md](RELEASE_SETUP.md).
+> Objective release evidence is tracked in [READINESS_SCORECARD.md](READINESS_SCORECARD.md); no commercial-ready claim is made until all ten gates pass.
 
 ---
 
