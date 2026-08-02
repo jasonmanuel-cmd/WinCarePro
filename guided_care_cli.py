@@ -12,7 +12,7 @@ from typing import Any, Sequence
 from core.health import HealthScore
 from core.logger import AppLogger
 from core.scanner import Scanner
-from guided_care import CareProfiles, CareSnapshot, CareStore, WeeklyReport
+from guided_care import CareProfiles, CareSnapshot, CareStore, ChangeDetector, WeeklyReport
 
 
 SCHEMA_VERSION = 1
@@ -51,6 +51,7 @@ def dashboard(store: CareStore) -> dict[str, Any]:
         "findings": snapshot["findings"] if snapshot else [],
         "snapshot_captured_at": snapshot["captured_at"] if snapshot else None,
         "timeline_count": len(store.timeline()),
+        "latest_changes": ChangeDetector().compare(snapshots[-2], snapshots[-1]) if len(snapshots) > 1 else [],
     }
 
 

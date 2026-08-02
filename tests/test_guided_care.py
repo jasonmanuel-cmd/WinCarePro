@@ -10,6 +10,8 @@ from guided_care import (
     CareProfiles,
     CareSnapshot,
     CareStore,
+    ChangeDetector,
+    ChangeReceipt,
     ProofEngine,
     WeeklyReport,
 )
@@ -115,6 +117,29 @@ def test_proof_engine_classifies_metric_comparison(before, after, expected):
     proof = ProofEngine().compare("cleanup_temp_files", before, after, "disk_free_pct")
 
     assert proof.status == expected
+
+
+def test_change_detector_reports_only_shared_measured_changes():
+    before = CareSnapshot(utc_timestamp(1), {"startup_count": 8, "ram_pct": 70, "fast_startup": True, "old": 1})
+    after = CareSnapshot(utc_timestamp(), {"startup_count": 6, "ram_pct": 70, "fast_startup": False, "new": 1})
+
+    assert ChangeDetector().compare(before, after) == [
+        {"metric": "fast_startup", "before": True, "after": False, "delta": None},
+        {"metric": "startup_count", "before": 8, "after": 6, "delta": -2},
+    ]
+
+
+def test_change_receipt_contains_proof_and_rollback_protection():
+    action = CareAction("startup_pause", "Pause startup item", "Startup became slower.", "Warning")
+    proof = ProofEngine().compare("startup_pause", {"startup_seconds": 61}, {"startup_seconds": 44}, "startup_seconds", higher_is_better=False)
+
+    receipt = ChangeReceipt().create(action, proof, protection=("Startup entry saved", "One-click undo"))
+
+    assert receipt["result"] == "verified"
+    assert receipt["measurement"]["delta"] == 17
+    assert receipt["protection"] == ["Startup entry saved", "One-click undo"]
+    assert receipt["reversible"] is True
+    json.dumps(receipt)
 
 
 def test_executor_denies_unapproved_actions_and_records_the_event(tmp_path):

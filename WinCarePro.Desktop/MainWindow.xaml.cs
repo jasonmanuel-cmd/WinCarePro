@@ -191,6 +191,7 @@ public partial class MainWindow : Window
         var findings = data.GetProperty("findings");
         var capturedAt = data.GetProperty("snapshot_captured_at");
         var timelineCount = data.GetProperty("timeline_count").GetInt32();
+        var changes = data.GetProperty("latest_changes").EnumerateArray().ToArray();
 
         var risks = findings.EnumerateArray()
             .Where(item => IsRisk(item.GetProperty("severity").GetString()))
@@ -212,7 +213,10 @@ public partial class MainWindow : Window
         SetAccessibleText(HealthScoreText, "Health score", healthScore.ToString("0", CultureInfo.CurrentCulture));
         SetAccessibleText(GradeText, "Health grade", data.GetProperty("grade").GetString()!);
         SetAccessibleText(UrgentRiskCountText, "Risks to review", risks.Count.ToString(CultureInfo.CurrentCulture));
-        SetAccessibleText(RecentChangeText, "Latest baseline", $"{capturedAt.GetString()} · {timelineCount} history items");
+        var changeSummary = changes.Length == 0
+            ? "No measured changes from the previous baseline"
+            : $"{changes.Length} measured change{(changes.Length == 1 ? string.Empty : "s")} from the previous baseline";
+        SetAccessibleText(RecentChangeText, "Latest baseline", $"{changeSummary} · {timelineCount} history items");
         var plan = risks.Count == 0
             ? new[] { "No critical or warning findings in the latest baseline." }
             : risks.Select((item, index) =>
@@ -442,6 +446,19 @@ public partial class MainWindow : Window
                 ValidateFindings(dashboardFindings);
                 RequireTimestampOrNull(data, "snapshot_captured_at");
                 RequireInteger(data, "timeline_count", 0);
+                var latestChanges = RequireArray(data, "latest_changes");
+                foreach (var change in latestChanges.EnumerateArray())
+                {
+                    RequireObject(change, "change");
+                    _ = RequireString(change, "metric");
+                    if (!change.TryGetProperty("before", out _) ||
+                        !change.TryGetProperty("after", out _) ||
+                        !change.TryGetProperty("delta", out var delta) ||
+                        delta.ValueKind is not (JsonValueKind.Number or JsonValueKind.Null))
+                    {
+                        throw new InvalidDataException("The local bridge change is invalid.");
+                    }
+                }
                 if (data.GetProperty("snapshot_captured_at").ValueKind == JsonValueKind.Null &&
                     dashboardFindings.GetArrayLength() != 0)
                 {

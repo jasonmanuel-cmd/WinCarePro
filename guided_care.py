@@ -303,6 +303,44 @@ class ProofEngine:
         return CareOutcome(action_id, action_id, status, f"{metric} changed by {delta:g}.", {"metric": metric, "before": previous, "after": current, "delta": delta})
 
 
+class ChangeDetector:
+    """Report only measured metric changes; never guess at causation."""
+
+    def compare(self, before: CareSnapshot, after: CareSnapshot) -> list[dict[str, Any]]:
+        changes = []
+        for metric in sorted(before.metrics.keys() & after.metrics.keys()):
+            previous, current = before.metrics[metric], after.metrics[metric]
+            if isinstance(previous, bool) or isinstance(current, bool):
+                if previous != current:
+                    changes.append({"metric": metric, "before": previous, "after": current, "delta": None})
+            elif isinstance(previous, (int, float)) and isinstance(current, (int, float)) and previous != current:
+                changes.append({"metric": metric, "before": previous, "after": current, "delta": current - previous})
+        return changes
+
+
+class ChangeReceipt:
+    """Create a local, serializable receipt from measurements and rollback evidence."""
+
+    def create(
+        self,
+        action: CareAction,
+        proof: CareOutcome,
+        *,
+        protection: Sequence[str] = (),
+    ) -> dict[str, Any]:
+        return {
+            "action_id": action.action_id,
+            "action": action.title,
+            "reason": action.reason,
+            "result": proof.status,
+            "message": proof.message,
+            "measurement": _plain(proof.detail),
+            "reversible": action.reversible,
+            "protection": [str(item) for item in protection if str(item).strip()],
+            "generated_at": _now(),
+        }
+
+
 @dataclass(frozen=True)
 class CareProfile:
     profile_id: str

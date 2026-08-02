@@ -149,3 +149,4 @@ def test_dashboard_works_with_an_empty_store(tmp_path):
     assert dashboard["health_score"] == 100
     assert dashboard["findings"] == []
     assert dashboard["timeline_count"] == 0
+    assert dashboard["latest_changes"] == []
