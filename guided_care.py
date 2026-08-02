@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -23,16 +23,41 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+_SENSITIVE_DETAIL_PARTS = ("path", "secret", "token", "password", "api_key")
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    if isinstance(value, set):
+        return frozenset(_freeze(item) for item in value)
+    return deepcopy(value)
+
+
 def _frozen_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
-    return MappingProxyType(deepcopy(dict(value or {})))
+    return _freeze(value or {})
 
 
 def _plain(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, tuple):
+    if isinstance(value, (tuple, frozenset)):
         return [_plain(item) for item in value]
     return value
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _redact(item)
+            for key, item in value.items()
+            if not any(part in str(key).casefold() for part in _SENSITIVE_DETAIL_PARTS)
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact(item) for item in value]
+    return deepcopy(value)
 
 
 @dataclass(frozen=True)
@@ -81,7 +106,7 @@ class CareOutcome:
     detail: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "detail", _frozen_mapping(self.detail))
+        object.__setattr__(self, "detail", _frozen_mapping(_redact(self.detail or {})))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -135,14 +160,17 @@ class CareStore:
     def _timeline_item(line: str) -> dict[str, Any] | None:
         try:
             value = json.loads(line)
-            return value if isinstance(value, dict) and isinstance(value.get("event"), str) else None
+            if not isinstance(value, dict) or not isinstance(value.get("event"), str):
+                return None
+            if not isinstance(value.get("at"), str) or not isinstance(value.get("detail"), Mapping):
+                return None
+            return value
         except ValueError:
             return None
 
     @staticmethod
     def _safe_detail(detail: Mapping[str, Any]) -> dict[str, Any]:
-        excluded = {"path", "paths", "secret", "token", "password", "api_key"}
-        return {str(key): _plain(value) for key, value in detail.items() if str(key).casefold() not in excluded}
+        return _plain(_redact(detail))
 
     def _atomic_write(self, path: Path, content: str) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -163,13 +191,17 @@ class CarePlanner:
         "disk": ("cleanup_temp_files", "Clean temporary files", "Low disk space was detected.", 90, 90),
         "memory": ("reclaim_memory", "Reclaim process working sets", "Memory pressure was detected.", 70, 90),
     }
+    _DESTRUCTIVE_ACTION_IDS = frozenset({"cleanup_temp_files"})
 
     def __init__(self, allowlisted_actions: Collection[str] | None = None) -> None:
-        self.allowlisted_actions = frozenset(allowlisted_actions or ("cleanup_temp_files", "reclaim_memory"))
+        self.allowlisted_actions = frozenset(
+            ("cleanup_temp_files", "reclaim_memory") if allowlisted_actions is None else allowlisted_actions
+        )
 
     def build_plan(self, findings: Sequence[Mapping[str, Any]] | None) -> list[CareAction]:
         actions: list[CareAction] = []
         seen: set[tuple[str, str]] = set()
+        seen_safe_action_ids: set[str] = set()
         for finding in findings or ():
             if not isinstance(finding, Mapping) or str(finding.get("severity", "")).casefold() not in {"critical", "warning"}:
                 continue
@@ -182,14 +214,19 @@ class CarePlanner:
             safe = self._SAFE_ACTIONS.get(category.casefold())
             if safe:
                 action_id, action_title, reason, impact, confidence = safe
-                actions.append(CareAction(action_id, action_title, reason, str(finding["severity"]), impact, confidence))
+                if action_id not in seen_safe_action_ids:
+                    actions.append(CareAction(
+                        action_id, action_title, reason, str(finding["severity"]), impact, confidence,
+                        requires_confirmation=action_id in self._DESTRUCTIVE_ACTION_IDS,
+                    ))
+                    seen_safe_action_ids.add(action_id)
             else:
                 actions.append(CareAction(
                     "review_required", f"{category}: {title}",
                     "This finding needs an explicit targeted review; it is not safe to auto-change.",
                     str(finding["severity"]), 50, 50, False, True,
                 ))
-        return sorted(actions, key=lambda item: (item.requires_confirmation, -item.impact, -item.confidence, item.action_id, item.title))
+        return sorted(actions, key=lambda item: (-item.impact, item.requires_confirmation, -item.confidence, item.action_id, item.title))
 
     def execute(
         self,
@@ -204,9 +241,10 @@ class CarePlanner:
         outcomes: list[CareOutcome] = []
         approved_risky = frozenset(action.action_id for action in actions) if destructive_approved is True else frozenset(destructive_approved)
         for action in actions:
+            requires_separate_approval = action.action_id in self._DESTRUCTIVE_ACTION_IDS or action.requires_confirmation
             if is_cancelled and is_cancelled():
                 outcome = CareOutcome(action.action_id, action.title, "cancelled", "Stopped before this action began.")
-            elif not approved or (action.requires_confirmation and action.action_id not in approved_risky):
+            elif not approved or (requires_separate_approval and action.action_id not in approved_risky):
                 outcome = CareOutcome(action.action_id, action.title, "denied", "Approval is required before this action can run.")
             elif action.action_id not in self.allowlisted_actions:
                 outcome = CareOutcome(action.action_id, action.title, "skipped", "This action is not allowlisted for Guided Care.")
@@ -300,12 +338,24 @@ class WeeklyReport:
         self.store = store
 
     def generate(self) -> dict[str, Any]:
-        snapshots = self.store.snapshots()
-        scores = [item.metrics.get("health_score") for item in snapshots if isinstance(item.metrics.get("health_score"), (int, float))]
-        risks = self._risks(snapshots[-1] if snapshots else None)
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=7)
+        snapshots = [
+            (at, snapshot)
+            for snapshot in self.store.snapshots()
+            if (at := self._parsed_time(snapshot.captured_at)) is not None and cutoff <= at <= now
+        ]
+        snapshots.sort(key=lambda item: item[0])
+        recent_snapshots = [snapshot for _, snapshot in snapshots]
+        scores = [item.metrics.get("health_score") for item in recent_snapshots if isinstance(item.metrics.get("health_score"), (int, float))]
+        risks = self._risks(recent_snapshots[-1] if recent_snapshots else None)
         completed = sum(
             1 for event in self.store.timeline()
-            if event["event"] in {"executed", "verified"} and event.get("detail", {}).get("status") == "verified"
+            if (at := self._parsed_time(event.get("at"))) is not None
+            and cutoff <= at <= now
+            and event["event"] in {"executed", "verified"}
+            and isinstance(event.get("detail"), Mapping)
+            and event["detail"].get("status") == "verified"
         )
         return {
             "score_start": scores[0] if scores else None,
@@ -315,6 +365,16 @@ class WeeklyReport:
             "unresolved_risks": risks,
             "next_steps": [f"Review: {risk}" for risk in risks] or ["Continue regular scans."],
         }
+
+    @staticmethod
+    def _parsed_time(value: object) -> datetime | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
 
     @staticmethod
     def _risks(snapshot: CareSnapshot | None) -> list[str]:
