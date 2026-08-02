@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.11+ stdlib, existing psutil/Python engines, pytest, .NET 8 WPF, System.Text.Json.
 
+**Status:** Implemented and locally verified on 2026-08-02. External release gates remain documented in `RELEASE_CHECKLIST.md`.
+
 ## Global Constraints
 
 - No new dependency, cloud service, paid model, scheduler, account, or telemetry.

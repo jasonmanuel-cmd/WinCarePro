@@ -50,6 +50,20 @@ Simply double-click **`run.bat`**:
 
 ## 📋 Complete Feature Overview
 
+### Guided Care + Proof
+
+The native WPF dashboard provides a read-only Guided Care workflow: run a scan,
+review a deterministic ranked plan, choose one of five care profiles, inspect
+local proof history, and read a weekly score/risk summary. Snapshots and timeline
+events stay under `%LOCALAPPDATA%\WinCarePro\care`; no Guided Care data is sent
+to a cloud service.
+
+Guided Care never turns recommendations into shell commands. Risky work still
+opens the existing Safety Center or Undo Center, where the normal preview,
+approval, restore, and rollback safeguards apply. Stopping or timing out a scan
+starts no repair action and records the interruption when the operation deadline
+still allows it.
+
 | Tab | What it does |
 |---|---|
 | **Dashboard** | Health Score (0-100), live CPU/RAM/Disk gauges, quick actions |
@@ -66,6 +80,12 @@ Simply double-click **`run.bat`**:
 | **Old & Duplicate Files** | Review-first Desktop/Downloads scan for 180-day-old installers and SHA-256-confirmed duplicates |
 | **Maintenance** | 1-Click Full Maintenance, winget updates, storage analyzer, quick tools launcher |
 | **Settings** | Themes, auto restore point toggle, **Undo Center** (revert service/startup changes) |
+
+The Guided Care WPF shell and local bridge build and pass automated tests on the
+development PC. Commercial release still requires a signed installer, clean
+Windows 11 VM install/launch/uninstall evidence, UI Automation verification in
+that VM, controlled mutation/rollback testing, and live checkout/update-provider
+configuration. These are release gates, not certified results.
 
 ---
 

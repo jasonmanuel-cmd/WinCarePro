@@ -5,11 +5,13 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 
@@ -19,6 +21,7 @@ public partial class MainWindow : Window
 {
     private const int BridgeSchemaVersion = 1;
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan TeardownWait = TimeSpan.FromSeconds(1);
     private static readonly HashSet<string> BridgeCommands =
         new(StringComparer.Ordinal) { "dashboard", "scan", "profiles", "timeline", "weekly-report" };
     private static readonly HashSet<string> HealthGrades =
@@ -92,32 +95,32 @@ public partial class MainWindow : Window
 
     private Task RefreshAsync() => RunOperationAsync(
         isScan: false,
-        async token =>
+        async (token, budget) =>
         {
             SetStatus("Refreshing local Guided Care data…");
-            await LoadDashboardDataAsync(token);
+            await LoadDashboardDataAsync(token, budget);
             SetStatus("Guided Care is ready. Review the plan before opening the Safety Center.");
         });
 
     private Task StartScanAsync() => RunOperationAsync(
         isScan: true,
-        async token =>
+        async (token, budget) =>
         {
             SetStatus("Running a read-only guided scan…");
             try
             {
-                _ = await RunBridgeAsync("scan", token);
+                _ = await RunBridgeAsync("scan", token, budget);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 _scanWasInterrupted = true;
                 throw;
             }
-            await LoadDashboardDataAsync(token);
+            await LoadDashboardDataAsync(token, budget);
             SetStatus("Scan complete. The ranked review plan and local proof history are updated.");
         });
 
-    private async Task RunOperationAsync(bool isScan, Func<CancellationToken, Task> operation)
+    private async Task RunOperationAsync(bool isScan, Func<CancellationToken, OperationBudget, Task> operation)
     {
         if (_operationRunning)
         {
@@ -127,24 +130,31 @@ public partial class MainWindow : Window
 
         _operationRunning = true;
         _operationCancellation = new CancellationTokenSource();
-        using var timeout = new CancellationTokenSource(OperationTimeout);
+        using var budget = new OperationBudget(OperationTimeout);
         using var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             _operationCancellation.Token,
-            timeout.Token);
+            budget.DeadlineToken);
         _scanWasInterrupted = false;
         SetBusyState(true);
         try
         {
-            await operation(operationCancellation.Token);
+            await operation(operationCancellation.Token, budget);
         }
-        catch (OperationCanceledException) when (_operationCancellation.IsCancellationRequested || timeout.IsCancellationRequested)
+        catch (OperationCanceledException) when (_operationCancellation.IsCancellationRequested || budget.DeadlineExpired)
         {
             var interruptedScan = isScan && _scanWasInterrupted;
-            var recorded = !interruptedScan || await TryRecordScanCancellationAsync();
+            var recordResult = interruptedScan
+                ? await TryRecordScanCancellationAsync(budget)
+                : CancellationRecordResult.NotNeeded;
             var action = _operationCancellation.IsCancellationRequested ? "stopped" : "timed out after 30 seconds";
-            SetStatus(recorded
-                ? $"Guided Care {action}. No repair action was started."
-                : $"Guided Care {action}. No repair action was started, but the interrupted scan could not be added to local history.");
+            var persistence = recordResult switch
+            {
+                CancellationRecordResult.Recorded => " The interrupted scan was added to local history.",
+                CancellationRecordResult.NoTimeRemaining => " The scan stopped locally; its cancellation was not added to history because the 30-second deadline expired.",
+                CancellationRecordResult.Failed => " The scan stopped locally, but its cancellation could not be added to history.",
+                _ => string.Empty,
+            };
+            SetStatus($"Guided Care {action}. No repair action was started.{persistence}");
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or InvalidOperationException or Win32Exception)
         {
@@ -167,12 +177,12 @@ public partial class MainWindow : Window
         StopButton.IsEnabled = busy;
     }
 
-    private async Task LoadDashboardDataAsync(CancellationToken token)
+    private async Task LoadDashboardDataAsync(CancellationToken token, OperationBudget budget)
     {
-        RenderDashboard(await RunBridgeAsync("dashboard", token));
-        RenderProfiles(await RunBridgeAsync("profiles", token));
-        RenderTimeline(await RunBridgeAsync("timeline", token));
-        RenderWeeklyReport(await RunBridgeAsync("weekly-report", token));
+        RenderDashboard(await RunBridgeAsync("dashboard", token, budget));
+        RenderProfiles(await RunBridgeAsync("profiles", token, budget));
+        RenderTimeline(await RunBridgeAsync("timeline", token, budget));
+        RenderWeeklyReport(await RunBridgeAsync("weekly-report", token, budget));
     }
 
     private void RenderDashboard(JsonElement data)
@@ -268,7 +278,21 @@ public partial class MainWindow : Window
             $"{scoreSummary} Verified work: {completed}. {riskSummary} Next: {string.Join("; ", nextSteps)}");
     }
 
-    private void SetStatus(string message) => SetAccessibleText(StatusText, "Guided Care status", message);
+    private void SetStatus(string message)
+    {
+        SetAccessibleText(StatusText, "Guided Care status", message);
+        try
+        {
+            var peer = UIElementAutomationPeer.FromElement(StatusText) ??
+                       UIElementAutomationPeer.CreatePeerForElement(StatusText) ??
+                       new FrameworkElementAutomationPeer(StatusText);
+            peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        }
+        catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or COMException)
+        {
+            // UI Automation can be unavailable during startup or teardown; status text still updates visibly.
+        }
+    }
 
     private static void SetAccessibleText(TextBlock control, string label, string value)
     {
@@ -284,23 +308,31 @@ public partial class MainWindow : Window
             values.Length == 0 ? $"{label}: empty" : $"{label}: {values.Length} items. {values[0]}");
     }
 
-    private async Task<bool> TryRecordScanCancellationAsync()
+    private async Task<CancellationRecordResult> TryRecordScanCancellationAsync(OperationBudget budget)
     {
+        if (budget.DeadlineExpired)
+        {
+            return CancellationRecordResult.NoTimeRemaining;
+        }
         try
         {
-            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            _ = await RunBridgeAsync("scan", cancellation.Token, cancelledScan: true);
-            return true;
+            _ = await RunBridgeAsync("scan", budget.DeadlineToken, budget, cancelledScan: true);
+            return CancellationRecordResult.Recorded;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or InvalidOperationException or Win32Exception or OperationCanceledException)
+        catch (OperationCanceledException) when (budget.DeadlineExpired)
         {
-            return false;
+            return CancellationRecordResult.NoTimeRemaining;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or InvalidOperationException or Win32Exception)
+        {
+            return CancellationRecordResult.Failed;
         }
     }
 
     private static async Task<JsonElement> RunBridgeAsync(
         string command,
         CancellationToken cancellationToken,
+        OperationBudget budget,
         bool cancelledScan = false)
     {
         if (!BridgeCommands.Contains(command) || (cancelledScan && command != "scan"))
@@ -344,31 +376,33 @@ public partial class MainWindow : Window
         try
         {
             await process.WaitForExitAsync(cancellationToken);
+            var (stdout, stderr) = await ReadOutputWithinBudgetAsync(
+                stdoutTask,
+                stderrTask,
+                cancellationToken,
+                budget);
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"The local bridge failed ({SafeDiagnostic(stderr)}).");
+            }
+            if (!string.IsNullOrWhiteSpace(stderr))
+            {
+                throw new InvalidDataException($"The local bridge returned unexpected diagnostics ({SafeDiagnostic(stderr)}).");
+            }
+            if (stdout.Length > 4 * 1024 * 1024)
+            {
+                throw new InvalidDataException("The local bridge response was too large.");
+            }
+
+            using var document = JsonDocument.Parse(stdout);
+            return ValidateEnvelope(document.RootElement, command);
         }
         catch
         {
             KillBridge(process);
-            await ObserveOutputAsync(stdoutTask, stderrTask);
+            await DrainOutputWithinBudgetAsync(stdoutTask, stderrTask, budget);
             throw;
         }
-
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"The local bridge failed ({SafeDiagnostic(stderr)}).");
-        }
-        if (!string.IsNullOrWhiteSpace(stderr))
-        {
-            throw new InvalidDataException($"The local bridge returned unexpected diagnostics ({SafeDiagnostic(stderr)}).");
-        }
-        if (stdout.Length > 4 * 1024 * 1024)
-        {
-            throw new InvalidDataException("The local bridge response was too large.");
-        }
-
-        using var document = JsonDocument.Parse(stdout);
-        return ValidateEnvelope(document.RootElement, command);
     }
 
     private static JsonElement ValidateEnvelope(JsonElement root, string expectedCommand)
@@ -600,16 +634,61 @@ public partial class MainWindow : Window
         }
     }
 
-    private static async Task ObserveOutputAsync(Task<string> stdoutTask, Task<string> stderrTask)
+    private static async Task<(string Stdout, string Stderr)> ReadOutputWithinBudgetAsync(
+        Task<string> stdoutTask,
+        Task<string> stderrTask,
+        CancellationToken cancellationToken,
+        OperationBudget budget)
     {
+        var outputTask = Task.WhenAll(stdoutTask, stderrTask);
+        var remaining = budget.Remaining;
+        if (remaining <= TimeSpan.Zero)
+        {
+            ObserveFault(outputTask);
+            throw new OperationCanceledException("The Guided Care operation deadline expired.", budget.DeadlineToken);
+        }
         try
         {
-            await Task.WhenAll(stdoutTask, stderrTask);
+            await outputTask.WaitAsync(remaining, cancellationToken);
         }
-        catch (IOException)
+        catch (TimeoutException ex)
         {
+            ObserveFault(outputTask);
+            throw new OperationCanceledException("The Guided Care operation deadline expired.", ex, budget.DeadlineToken);
+        }
+        return (stdoutTask.Result, stderrTask.Result);
+    }
+
+    private static async Task DrainOutputWithinBudgetAsync(
+        Task<string> stdoutTask,
+        Task<string> stderrTask,
+        OperationBudget budget)
+    {
+        var outputTask = Task.WhenAll(stdoutTask, stderrTask);
+        var remaining = budget.Remaining;
+        var wait = remaining < TeardownWait ? remaining : TeardownWait;
+        if (wait <= TimeSpan.Zero)
+        {
+            ObserveFault(outputTask);
+            return;
+        }
+
+        try
+        {
+            await outputTask.WaitAsync(wait, budget.DeadlineToken);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or OperationCanceledException or TimeoutException)
+        {
+            ObserveFault(outputTask);
         }
     }
+
+    private static void ObserveFault(Task task) =>
+        _ = task.ContinueWith(
+            completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
 
     private static string SafeDiagnostic(string stderr)
     {
@@ -726,13 +805,11 @@ public partial class MainWindow : Window
                 return null;
             }
 
-            var file = new FileInfo(fullPath);
-            if (!file.Exists)
+            if (!File.Exists(fullPath) || ContainsReparsePoint(root, fullPath))
             {
                 return null;
             }
-            var canonical = file.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? file.FullName;
-            return IsWithinRoot(canonical, root) ? canonical : null;
+            return fullPath;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
@@ -742,6 +819,27 @@ public partial class MainWindow : Window
 
     private static bool IsWithinRoot(string path, string root) =>
         path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsReparsePoint(string root, string path)
+    {
+        var current = root;
+        if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+        {
+            return true;
+        }
+
+        foreach (var component in Path.GetRelativePath(root, path).Split(
+                     new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, component);
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private void LaunchLegacy(string surface, string successMessage)
     {
@@ -765,6 +863,40 @@ public partial class MainWindow : Window
 
     private sealed record BridgePaths(string PythonPath, string ScriptPath);
     private sealed record CareProfileOption(string Id, string Title, string Recommendation);
+
+    private enum CancellationRecordResult
+    {
+        NotNeeded,
+        Recorded,
+        NoTimeRemaining,
+        Failed,
+    }
+
+    private sealed class OperationBudget : IDisposable
+    {
+        private readonly TimeSpan _limit;
+        private readonly Stopwatch _clock;
+        private readonly CancellationTokenSource _deadline;
+
+        public OperationBudget(TimeSpan limit)
+        {
+            _limit = limit;
+            _clock = Stopwatch.StartNew();
+            _deadline = new CancellationTokenSource(limit);
+        }
+
+        public CancellationToken DeadlineToken => _deadline.Token;
+        public TimeSpan Remaining => _limit - _clock.Elapsed is var remaining && remaining > TimeSpan.Zero
+            ? remaining
+            : TimeSpan.Zero;
+        public bool DeadlineExpired => Remaining <= TimeSpan.Zero || _deadline.IsCancellationRequested;
+
+        public void Dispose()
+        {
+            _deadline.Dispose();
+            _clock.Stop();
+        }
+    }
 
     private sealed class RelayCommand(Action action) : ICommand
     {
