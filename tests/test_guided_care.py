@@ -180,9 +180,13 @@ def test_executor_records_cancellation_interruption_and_missing_handler(tmp_path
 
 def test_weekly_report_summarizes_score_change_completed_work_and_unresolved_risks(tmp_path):
     store = CareStore(tmp_path)
-    store.save_snapshot(snapshot(1, score=60, findings=({"severity": "Critical", "title": "Disk"},)))
-    store.save_snapshot(snapshot(2, score=78, findings=({"severity": "Warning", "title": "Memory"},)))
-    store.append_event("executed", {"action_id": "cleanup_temp_files", "status": "verified"})
+    store.save_snapshot(CareSnapshot(
+        utc_timestamp(1), {"health_score": 60}, ({"severity": "Critical", "title": "Disk"},)
+    ))
+    store.save_snapshot(CareSnapshot(
+        utc_timestamp(), {"health_score": 78}, ({"severity": "Warning", "title": "Memory"},)
+    ))
+    store.append_event("executed", {"action_id": "cleanup_temp_files", "status": "verified"}, at=utc_timestamp())
 
     report = WeeklyReport(store).generate()
 
