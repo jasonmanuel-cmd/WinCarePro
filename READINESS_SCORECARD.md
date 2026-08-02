@@ -7,7 +7,7 @@ The product is commercially ready only when all ten gates pass on the release ar
 |---|---|---|---|
 | 1 | Product capability | Full automated suite plus baseline, change, protected experiment, proof receipt, keep, and revert flows | PASS locally: 78 tests on 2026-08-02 |
 | 2 | Data safety | Empty/corrupt/boundary tests, atomic state writes, retention limits, sensitive-detail redaction | PASS locally |
-| 3 | Action safety | Explicit approval, separate destructive approval, verified rollback protection, fail-closed handlers | PASS in automated tests; real mutation evidence pending |
+| 3 | Action safety | Explicit approval, separate destructive approval, verified rollback protection, fail-closed handlers | PASS for automated flows and isolated real HKCU mutation/rollback; production-action VM matrix pending |
 | 4 | Security | Medium/high Bandit scan, dependency audit, secret review, fixed-command bridge validation | PASS locally |
 | 5 | Accessibility | Keyboard, focus, names, roles, values, live regions, high contrast, screen reader on release artifact | BLOCKED: clean-VM UI Automation evidence missing |
 | 6 | Build reproducibility | Pinned dependencies, full build, release hash, packaged launch | PASS on development PC; independent clean build pending |
@@ -31,5 +31,6 @@ bandit -q -r guided_care.py guided_care_cli.py -lll -iii
 pip-audit -r requirements.txt
 dotnet build WinCarePro.Desktop\WinCarePro.Desktop.csproj -c Release --no-restore
 Get-AuthenticodeSignature dist\WinCarePro.exe
+.venv\Scripts\python.exe release\mutation_rollback_fixture.py --execute
 git diff --check
 ```
