@@ -2,73 +2,195 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:automation="clr-namespace:System.Windows.Automation;assembly=PresentationCore"
-        Title="WinCare Pro" Width="1120" Height="720" MinWidth="900" MinHeight="600"
+        Title="WinCare Pro Guided Care" Width="1180" Height="780" MinWidth="900" MinHeight="600"
         Background="{DynamicResource BackgroundBrush}"
         Foreground="{DynamicResource TextBrush}"
-        automation:AutomationProperties.Name="WinCare Pro main window">
+        Loaded="Window_Loaded"
+        Closed="Window_Closed"
+        automation:AutomationProperties.Name="WinCare Pro Guided Care dashboard">
+  <Window.Resources>
+    <Style x:Key="KeyboardFocusStyle">
+      <Setter Property="Control.Template">
+        <Setter.Value>
+          <ControlTemplate>
+            <Border BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                    BorderThickness="3" CornerRadius="5" Margin="2"/>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="AccessibleButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusStyle}"/>
+      <Setter Property="Margin" Value="0,0,10,10"/>
+      <Setter Property="MinHeight" Value="44"/>
+    </Style>
+    <Style x:Key="AccessibleNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusStyle}"/>
+      <Setter Property="MinHeight" Value="42"/>
+    </Style>
+    <Style x:Key="AccessibleSelector" TargetType="Control">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusStyle}"/>
+    </Style>
+    <Style x:Key="CareCard" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="20"/>
+      <Setter Property="Margin" Value="0,0,12,12"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+          <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"/>
+          <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"/>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+  </Window.Resources>
+
   <Window.InputBindings>
     <KeyBinding Key="D" Modifiers="Control" Command="{Binding DashboardCommand}"/>
     <KeyBinding Key="S" Modifiers="Control" Command="{Binding ScanCommand}"/>
   </Window.InputBindings>
+
   <Grid>
-    <Grid.ColumnDefinitions><ColumnDefinition Width="250"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="230"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+
     <Border Background="#101722" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
-      <DockPanel Margin="20">
+      <DockPanel Margin="18">
         <StackPanel DockPanel.Dock="Top">
           <TextBlock Text="WINCARE PRO" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
-          <TextBlock Text="SYSTEM CARE CENTER" FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="0,3,0,28"/>
-          <Button Style="{StaticResource NavButton}" Content="Dashboard" Click="ShowDashboard" automation:AutomationProperties.Name="Dashboard"/>
-          <Button Style="{StaticResource NavButton}" Content="System Health" Click="OpenLegacy" Tag="System Health" automation:AutomationProperties.Name="System Health"/>
-          <Button Style="{StaticResource NavButton}" Content="Processes &amp; Cleanup" Click="OpenLegacy" Tag="Processes and Cleanup" automation:AutomationProperties.Name="Processes and Cleanup"/>
-          <Button Style="{StaticResource NavButton}" Content="Privacy &amp; Network" Click="OpenLegacy" Tag="Privacy and Network" automation:AutomationProperties.Name="Privacy and Network"/>
-          <Button Style="{StaticResource NavButton}" Content="Repairs &amp; Recovery" Click="OpenLegacy" Tag="Repairs and Recovery" automation:AutomationProperties.Name="Repairs and Recovery"/>
-          <Button Style="{StaticResource NavButton}" Content="Settings &amp; License" Click="OpenLegacy" Tag="Settings and License" automation:AutomationProperties.Name="Settings and License"/>
+          <TextBlock Text="GUIDED CARE" FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="0,3,0,26"/>
+          <Button Style="{StaticResource AccessibleNavButton}" Content="Care dashboard" Click="Refresh_Click"
+                  automation:AutomationProperties.Name="Refresh Care dashboard"/>
+          <Button Style="{StaticResource AccessibleNavButton}" Content="Safety Center" Click="OpenSafetyCenter_Click"
+                  automation:AutomationProperties.Name="Open Safety Center"/>
+          <Button Style="{StaticResource AccessibleNavButton}" Content="Undo Center" Click="OpenUndoCenter_Click"
+                  automation:AutomationProperties.Name="Open Undo Center"/>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom">
-          <TextBlock Text="Accessible interface preview" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
-          <TextBlock Text="v1.3.0" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,4,0,0"/>
+          <TextBlock Text="Local care history" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
+          <TextBlock Text="No cloud or telemetry" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,4,0,0"/>
         </StackPanel>
       </DockPanel>
     </Border>
-    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
-      <StackPanel Margin="42,34">
-        <DockPanel>
-          <StackPanel>
-            <TextBlock Text="Good system care starts here." FontSize="30" FontWeight="SemiBold"/>
-            <TextBlock Text="Review first. Apply only the changes you approve." Foreground="{DynamicResource MutedBrush}" FontSize="15" Margin="0,7,0,0"/>
-          </StackPanel>
-          <Border DockPanel.Dock="Right" Background="#123044" CornerRadius="16" Padding="14,7" VerticalAlignment="Top">
-            <TextBlock Text="●  READY" Foreground="#7DD3FC" FontWeight="Bold"/>
-          </Border>
-        </DockPanel>
 
-        <UniformGrid Columns="3" Margin="0,34,0,24">
-          <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="22" Margin="0,0,12,0">
-            <StackPanel><TextBlock Text="SYSTEM STATUS" Foreground="{DynamicResource MutedBrush}" FontSize="12"/><TextBlock Text="Protected" FontSize="25" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel>
-          </Border>
-          <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="22" Margin="6,0">
-            <StackPanel><TextBlock Text="CLEANUP MODE" Foreground="{DynamicResource MutedBrush}" FontSize="12"/><TextBlock Text="Review-first" FontSize="25" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel>
-          </Border>
-          <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="22" Margin="12,0,0,0">
-            <StackPanel><TextBlock Text="UPDATE CHANNEL" Foreground="{DynamicResource MutedBrush}" FontSize="12"/><TextBlock Text="Secure" FontSize="25" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel>
-          </Border>
-        </UniformGrid>
+    <Grid Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
 
-        <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="26">
-          <Grid>
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="32,28,28,24">
+          <DockPanel LastChildFill="True">
+            <Border DockPanel.Dock="Right" Background="#123044" CornerRadius="16" Padding="14,7" VerticalAlignment="Top">
+              <TextBlock x:Name="ReadinessText" Text="LOCAL" Foreground="#7DD3FC" FontWeight="Bold"
+                         automation:AutomationProperties.Name="Guided Care is local only"/>
+            </Border>
             <StackPanel>
-              <TextBlock Text="Run a guided system review" FontSize="20" FontWeight="SemiBold"/>
-              <TextBlock Text="The current production engine opens with every repair gated by a preview and confirmation."
-                         Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" MaxWidth="570" Margin="0,8,25,0"/>
+              <TextBlock Text="Guided Care" FontSize="31" FontWeight="SemiBold"/>
+              <TextBlock Text="Scan, review the plan, and choose what happens next."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="15" Margin="0,6,18,0"/>
             </StackPanel>
-            <Button Grid.Column="1" Content="Open full WinCare Pro" Click="OpenLegacy"
-                    automation:AutomationProperties.Name="Open full WinCare Pro"/>
-          </Grid>
-        </Border>
-        <TextBlock x:Name="StatusText" Text="Ready. Press Ctrl+D for dashboard or Ctrl+S to open the full scanner."
-                   Foreground="{DynamicResource MutedBrush}" Margin="0,22,0,0" automation:AutomationProperties.LiveSetting="Polite"/>
-      </StackPanel>
-    </ScrollViewer>
+          </DockPanel>
+
+          <WrapPanel Margin="0,26,0,8">
+            <Border Style="{StaticResource CareCard}" Width="190">
+              <StackPanel>
+                <TextBlock Text="HEALTH SCORE" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
+                <TextBlock x:Name="HealthScoreText" Text="Not scanned" FontSize="25" FontWeight="SemiBold" Margin="0,7,0,0"
+                           automation:AutomationProperties.Name="Health score"/>
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource CareCard}" Width="190">
+              <StackPanel>
+                <TextBlock Text="GRADE" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
+                <TextBlock x:Name="GradeText" Text="Not available" FontSize="25" FontWeight="SemiBold" Margin="0,7,0,0"
+                           automation:AutomationProperties.Name="Health grade"/>
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource CareCard}" Width="190">
+              <StackPanel>
+                <TextBlock Text="RISKS TO REVIEW" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
+                <TextBlock x:Name="UrgentRiskCountText" Text="Not available" FontSize="25" FontWeight="SemiBold" Margin="0,7,0,0"
+                           automation:AutomationProperties.Name="Risks to review"/>
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource CareCard}" Width="220">
+              <StackPanel>
+                <TextBlock Text="LATEST BASELINE" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
+                <TextBlock x:Name="RecentChangeText" Text="No scan loaded" FontSize="16" FontWeight="SemiBold" Margin="0,7,0,0"
+                           TextWrapping="Wrap" automation:AutomationProperties.Name="Latest baseline"/>
+              </StackPanel>
+            </Border>
+          </WrapPanel>
+
+          <WrapPanel Margin="0,4,0,14">
+            <Button x:Name="StartScanButton" Style="{StaticResource AccessibleButton}" Content="Start guided scan"
+                    Click="StartScan_Click" automation:AutomationProperties.Name="Start guided scan"/>
+            <Button x:Name="RefreshButton" Style="{StaticResource AccessibleButton}" Content="Refresh"
+                    Click="Refresh_Click" automation:AutomationProperties.Name="Refresh Guided Care"/>
+            <Button x:Name="SafetyCenterButton" Style="{StaticResource AccessibleButton}" Content="Open Safety Center"
+                    Click="OpenSafetyCenter_Click" automation:AutomationProperties.Name="Open Safety Center"/>
+            <Button x:Name="UndoCenterButton" Style="{StaticResource AccessibleButton}" Content="Open Undo Center"
+                    Click="OpenUndoCenter_Click" automation:AutomationProperties.Name="Open Undo Center"/>
+            <Button x:Name="StopButton" Style="{StaticResource AccessibleButton}" Content="Stop" IsEnabled="False"
+                    Click="Stop_Click" automation:AutomationProperties.Name="Stop current Guided Care operation"/>
+          </WrapPanel>
+
+          <Border Style="{StaticResource CareCard}">
+            <StackPanel>
+              <TextBlock Text="Care profile" FontSize="20" FontWeight="SemiBold"/>
+              <TextBlock Text="Profiles change recommendations only. They never change Windows settings."
+                         Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,5,0,12"/>
+              <ComboBox x:Name="ProfileComboBox" Style="{StaticResource AccessibleSelector}" MinHeight="38" MaxWidth="360"
+                        HorizontalAlignment="Left" SelectionChanged="ProfileSelectionChanged"
+                        DisplayMemberPath="Title" automation:AutomationProperties.Name="Care profile"/>
+              <TextBlock x:Name="ProfileDetailText" Text="No profile data loaded." TextWrapping="Wrap" Margin="0,10,0,0"
+                         automation:AutomationProperties.Name="Selected profile recommendation"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CareCard}">
+            <StackPanel>
+              <TextBlock Text="Ranked care plan" FontSize="20" FontWeight="SemiBold"/>
+              <TextBlock Text="Risky work stays behind preview and confirmation in the Safety Center."
+                         Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,5,0,12"/>
+              <ListBox x:Name="CarePlanList" Style="{StaticResource AccessibleSelector}" MinHeight="72" MaxHeight="220"
+                       automation:AutomationProperties.Name="Ranked care plan"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CareCard}">
+            <StackPanel>
+              <TextBlock Text="Proof and activity timeline" FontSize="20" FontWeight="SemiBold"/>
+              <TextBlock Text="Local scan, approval, outcome, cancellation, and rollback history."
+                         Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,5,0,12"/>
+              <ListBox x:Name="ProofTimelineList" Style="{StaticResource AccessibleSelector}" MinHeight="72" MaxHeight="220"
+                       automation:AutomationProperties.Name="Proof and activity timeline"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CareCard}">
+            <StackPanel>
+              <TextBlock Text="Weekly report" FontSize="20" FontWeight="SemiBold"/>
+              <TextBlock x:Name="WeeklyReportText" Text="No weekly report loaded." TextWrapping="Wrap" Margin="0,10,0,0"
+                         automation:AutomationProperties.Name="Weekly care report"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <Border Grid.Row="1" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="0,1,0,0" Padding="28,13">
+        <TextBlock x:Name="StatusText" Text="Guided Care is loading local data."
+                   Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"
+                   automation:AutomationProperties.Name="Guided Care status"
+                   automation:AutomationProperties.LiveSetting="Polite"/>
+      </Border>
+    </Grid>
   </Grid>
 </Window>
