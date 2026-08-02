@@ -504,3 +504,41 @@ class WeeklyReport:
             for finding in snapshot.findings
             if str(finding.get("severity", "")).casefold() in {"critical", "warning"}
         ]
+
+
+class SupportSummary:
+    """Build a reviewable support summary with no raw findings or event details."""
+
+    _METRICS = ("health_score", "disk_free_pct", "ram_pct", "startup_count", "pending_updates", "driver_issues")
+
+    def __init__(self, store: CareStore, version: str = "1.3.0") -> None:
+        self.store = store
+        self.version = version
+
+    def generate(self) -> dict[str, Any]:
+        snapshots = self.store.snapshots()
+        latest = snapshots[-1] if snapshots else None
+        metrics = {
+            name: latest.metrics[name]
+            for name in self._METRICS
+            if latest is not None and isinstance(latest.metrics.get(name), (int, float, bool))
+        }
+        events = []
+        for item in self.store.timeline()[-20:]:
+            detail = item.get("detail") if isinstance(item.get("detail"), Mapping) else {}
+            events.append({
+                "at": item["at"],
+                "event": item["event"],
+                "status": str(detail.get("status", "")),
+                "decision": str(detail.get("decision", "")),
+            })
+        return {
+            "product": "WinCarePro Guardian",
+            "version": self.version,
+            "generated_at": _now(),
+            "snapshot_count": len(snapshots),
+            "timeline_count": len(self.store.timeline()),
+            "latest_metrics": metrics,
+            "recent_events": events,
+            "privacy": "Review before sharing. No file paths, raw findings, or event details are included.",
+        }

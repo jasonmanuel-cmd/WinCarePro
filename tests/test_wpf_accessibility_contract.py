@@ -20,7 +20,10 @@ def elements(root, name):
 
 def test_every_interactive_control_has_an_accessible_name_and_focus_style():
     root = load_root()
-    controls = [*elements(root, "Button"), *elements(root, "ComboBox"), *elements(root, "ListBox")]
+    controls = [
+        *elements(root, "Button"), *elements(root, "ComboBox"),
+        *elements(root, "ListBox"), *elements(root, "TextBox"),
+    ]
 
     assert controls
     for control in controls:

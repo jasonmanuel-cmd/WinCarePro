@@ -181,6 +181,23 @@
                          automation:AutomationProperties.Name="Weekly care report"/>
             </StackPanel>
           </Border>
+
+          <Border Style="{StaticResource CareCard}">
+            <StackPanel>
+              <TextBlock Text="Privacy-safe support summary" FontSize="20" FontWeight="SemiBold"/>
+              <TextBlock Text="Preview exactly what will be copied. Nothing is uploaded or sent automatically."
+                         Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,5,0,12"/>
+              <WrapPanel>
+                <Button x:Name="PreviewSupportButton" Style="{StaticResource AccessibleButton}" Content="Preview support summary"
+                        Click="PreviewSupport_Click" automation:AutomationProperties.Name="Preview privacy-safe support summary"/>
+                <Button x:Name="CopySupportButton" Style="{StaticResource AccessibleButton}" Content="Copy reviewed summary"
+                        IsEnabled="False" Click="CopySupport_Click" automation:AutomationProperties.Name="Copy reviewed support summary"/>
+              </WrapPanel>
+              <TextBox x:Name="SupportSummaryText" Style="{StaticResource AccessibleSelector}" IsReadOnly="True"
+                       TextWrapping="Wrap" AcceptsReturn="True" MinHeight="90" MaxHeight="240"
+                       VerticalScrollBarVisibility="Auto" automation:AutomationProperties.Name="Support summary preview"/>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </ScrollViewer>
 

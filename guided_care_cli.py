@@ -12,11 +12,11 @@ from typing import Any, Sequence
 from core.health import HealthScore
 from core.logger import AppLogger
 from core.scanner import Scanner
-from guided_care import CareProfiles, CareSnapshot, CareStore, ChangeDetector, WeeklyReport
+from guided_care import CareProfiles, CareSnapshot, CareStore, ChangeDetector, SupportSummary, WeeklyReport
 
 
 SCHEMA_VERSION = 1
-COMMANDS = ("dashboard", "scan", "profiles", "timeline", "weekly-report")
+COMMANDS = ("dashboard", "scan", "profiles", "timeline", "weekly-report", "support-preview")
 
 
 class InputError(ValueError):
@@ -80,6 +80,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         return {"events": store.timeline()}
     if args.command == "weekly-report":
         return WeeklyReport(store).generate()
+    if args.command == "support-preview":
+        return SupportSummary(store).generate()
     raise InputError("Invalid command input.")
 
 

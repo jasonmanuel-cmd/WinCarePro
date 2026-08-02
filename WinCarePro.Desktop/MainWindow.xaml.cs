@@ -23,7 +23,7 @@ public partial class MainWindow : Window
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan TeardownWait = TimeSpan.FromSeconds(1);
     private static readonly HashSet<string> BridgeCommands =
-        new(StringComparer.Ordinal) { "dashboard", "scan", "profiles", "timeline", "weekly-report" };
+        new(StringComparer.Ordinal) { "dashboard", "scan", "profiles", "timeline", "weekly-report", "support-preview" };
     private static readonly HashSet<string> HealthGrades =
         new(StringComparer.Ordinal) { "Excellent", "Good", "Fair", "Poor", "Critical" };
     private static readonly HashSet<string> FindingSeverities =
@@ -76,6 +76,33 @@ public partial class MainWindow : Window
 
         SetStatus("Stopping at the next safe boundary…");
         _operationCancellation.Cancel();
+    }
+
+    private async void PreviewSupport_Click(object sender, RoutedEventArgs e) => await RunOperationAsync(
+        isScan: false,
+        async (token, budget) =>
+        {
+            SetStatus("Building a privacy-safe support summary for review…");
+            RenderSupportSummary(await RunBridgeAsync("support-preview", token, budget));
+            SetStatus("Support summary ready for review. Nothing has been sent.");
+        });
+
+    private void CopySupport_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(SupportSummaryText.Text))
+        {
+            SetStatus("Preview the support summary before copying it.");
+            return;
+        }
+        try
+        {
+            Clipboard.SetText(SupportSummaryText.Text);
+            SetStatus("The reviewed support summary was copied. Nothing was sent automatically.");
+        }
+        catch (Exception ex) when (ex is ExternalException or COMException)
+        {
+            SetStatus("Windows could not access the clipboard. The preview remains available.");
+        }
     }
 
     private void ProfileSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -283,6 +310,13 @@ public partial class MainWindow : Window
             WeeklyReportText,
             "Weekly care report",
             $"{scoreSummary} Verified work: {completed}. {riskSummary} Next: {string.Join("; ", nextSteps)}");
+    }
+
+    private void RenderSupportSummary(JsonElement data)
+    {
+        SupportSummaryText.Text = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        CopySupportButton.IsEnabled = true;
+        AutomationProperties.SetName(SupportSummaryText, "Reviewed privacy-safe support summary");
     }
 
     private void SetStatus(string message)
@@ -513,6 +547,30 @@ public partial class MainWindow : Window
                 RequireInteger(data, "completed_count", 0);
                 ValidateStringArray(RequireArray(data, "unresolved_risks"), "unresolved risks");
                 ValidateStringArray(RequireArray(data, "next_steps"), "next steps");
+                break;
+            case "support-preview":
+                _ = RequireString(data, "product");
+                _ = RequireString(data, "version");
+                RequireTimestamp(data, "generated_at");
+                RequireInteger(data, "snapshot_count", 0);
+                RequireInteger(data, "timeline_count", 0);
+                RequireObjectProperty(data, "latest_metrics");
+                foreach (var metric in data.GetProperty("latest_metrics").EnumerateObject())
+                {
+                    if (metric.Value.ValueKind is not (JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False))
+                    {
+                        throw new InvalidDataException("A support metric is invalid.");
+                    }
+                }
+                foreach (var item in RequireArray(data, "recent_events").EnumerateArray())
+                {
+                    RequireObject(item, "support event");
+                    RequireTimestamp(item, "at");
+                    _ = RequireString(item, "event");
+                    _ = RequireString(item, "status", allowEmpty: true);
+                    _ = RequireString(item, "decision", allowEmpty: true);
+                }
+                _ = RequireString(data, "privacy");
                 break;
             default:
                 throw new InvalidOperationException("A non-allowlisted Guided Care command was refused.");

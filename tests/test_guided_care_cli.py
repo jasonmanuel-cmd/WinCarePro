@@ -74,7 +74,7 @@ def json_stdout(result: subprocess.CompletedProcess[str]) -> dict:
 
 @pytest.mark.parametrize(
     "args",
-    [("dashboard",), ("scan", "--cancel"), ("profiles",), ("timeline",), ("weekly-report",)],
+    [("dashboard",), ("scan", "--cancel"), ("profiles",), ("timeline",), ("weekly-report",), ("support-preview",)],
 )
 def test_every_valid_command_returns_the_v1_json_envelope(tmp_path, args):
     result = run_cli(tmp_path, *args)

@@ -14,6 +14,7 @@ from guided_care import (
     ChangeDetector,
     ChangeReceipt,
     ProofEngine,
+    SupportSummary,
     WeeklyReport,
 )
 
@@ -349,3 +350,22 @@ def test_weekly_report_ignores_old_state_and_malformed_timeline_detail(tmp_path)
     assert report["score_change"] == 12
     assert report["completed_count"] == 1
     assert report["unresolved_risks"] == ["Current risk"]
+
+
+def test_support_summary_omits_raw_findings_paths_and_event_details(tmp_path):
+    store = CareStore(tmp_path)
+    store.save_snapshot(CareSnapshot(
+        utc_timestamp(), {"health_score": 81, "disk_free_pct": 33, "private_metric": "secret"},
+        ({"severity": "Warning", "title": "SECRET_FINDING", "file_path": "C:/private"},),
+    ))
+    store.append_event("experiment_failed", {
+        "status": "failed", "decision": "reverted", "message": "SECRET_MESSAGE", "file_path": "C:/private",
+    })
+
+    summary = SupportSummary(store).generate()
+    encoded = json.dumps(summary)
+
+    assert summary["latest_metrics"] == {"health_score": 81, "disk_free_pct": 33}
+    assert summary["recent_events"][0]["decision"] == "reverted"
+    assert "SECRET" not in encoded
+    assert "C:/private" not in encoded
