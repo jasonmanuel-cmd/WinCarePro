@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -14,12 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "guided_care_cli.py"
 
 
-def run_cli(state_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def run_cli(tmp_path: Path, *args: str, test_scan: bool = False) -> subprocess.CompletedProcess[str]:
+    env = os.environ | {"LOCALAPPDATA": str(tmp_path)}
+    if test_scan:
+        env["WINCAREPRO_GUIDED_CARE_TEST_SCAN"] = "1"
     return subprocess.run(
-        [sys.executable, str(CLI), "--state-dir", str(state_dir), *args],
+        [sys.executable, str(CLI), *args],
         cwd=ROOT,
         capture_output=True,
         text=True,
+        env=env,
         check=False,
     )
 
@@ -34,13 +39,7 @@ def json_stdout(result: subprocess.CompletedProcess[str]) -> dict:
 
 @pytest.mark.parametrize(
     "args",
-    [
-        ("dashboard",),
-        ("scan", "--cancel"),
-        ("profiles",),
-        ("timeline",),
-        ("weekly-report",),
-    ],
+    [("dashboard",), ("scan", "--cancel"), ("profiles",), ("timeline",), ("weekly-report",)],
 )
 def test_every_valid_command_returns_the_v1_json_envelope(tmp_path, args):
     result = run_cli(tmp_path, *args)
@@ -54,7 +53,14 @@ def test_every_valid_command_returns_the_v1_json_envelope(tmp_path, args):
 
 @pytest.mark.parametrize(
     "args",
-    [("unknown",), ("dashboard", "--command", "Get-Process"), ("dashboard", "--cancel")],
+    [
+        ("unknown",),
+        ("dashboard", "--command", "Get-Process"),
+        ("dashboard", "--cancel"),
+        ("scan", "--c"),
+        ("scan", "--can"),
+        ("--state-dir", "SECRET_STATE_PATH", "dashboard"),
+    ],
 )
 def test_malformed_or_unknown_commands_fail_closed_with_one_json_error(tmp_path, args):
     result = run_cli(tmp_path, *args)
@@ -63,7 +69,8 @@ def test_malformed_or_unknown_commands_fail_closed_with_one_json_error(tmp_path,
     payload = json_stdout(result)
     assert payload["schema_version"] == 1
     assert payload["error"]["code"] == "invalid_input"
-    assert "Get-Process" not in result.stdout
+    assert "Get-Process" not in result.stdout + result.stderr
+    assert "SECRET_STATE_PATH" not in result.stdout + result.stderr
 
 
 def test_scan_cancellation_records_a_local_timeline_event(tmp_path):
@@ -72,7 +79,24 @@ def test_scan_cancellation_records_a_local_timeline_event(tmp_path):
     assert result.returncode == 0, result.stderr
     assert json_stdout(result)["data"]["status"] == "cancelled"
     timeline = json_stdout(run_cli(tmp_path, "timeline"))["data"]["events"]
+    assert timeline == [timeline[-1]]
     assert timeline[-1]["event"] == "scan_cancelled"
+    assert not (tmp_path / "WinCarePro" / "care" / "snapshots.json").exists()
+
+
+def test_plain_scan_persists_the_dashboard_snapshot_and_completion_event(tmp_path):
+    result = run_cli(tmp_path, "scan", test_scan=True)
+
+    assert result.returncode == 0, result.stderr
+    payload = json_stdout(result)
+    assert payload["schema_version"] == 1
+    assert payload["command"] == "scan"
+    assert payload["data"]["status"] == "completed"
+    dashboard = json_stdout(run_cli(tmp_path, "dashboard"))["data"]
+    assert dashboard["snapshot_captured_at"]
+    assert dashboard["health_score"] == payload["data"]["health_score"]
+    timeline = json_stdout(run_cli(tmp_path, "timeline"))["data"]["events"]
+    assert timeline[-1]["event"] == "scan_completed"
 
 
 def test_dashboard_works_with_an_empty_store(tmp_path):
