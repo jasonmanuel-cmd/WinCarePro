@@ -13,18 +13,53 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "guided_care_cli.py"
+SUCCESSFUL_SCAN_HARNESS = """
+import guided_care_cli as cli
+
+class FixedScanner:
+    def __init__(self, logger):
+        pass
+
+    def run_full_scan(self, cancel_event=None):
+        return ([{"severity": "OK", "category": "Guided Care", "title": "Harness scan completed", "recommendation": "No action needed."}], {"cpu_pct": 10, "ram_pct": 20, "disk_free_pct": 50}, 100, [])
+
+cli.Scanner = FixedScanner
+raise SystemExit(cli.main(["scan"]))
+"""
+ENV_GATE_HARNESS = """
+import guided_care_cli as cli
+
+class FailingScanner:
+    def __init__(self, logger):
+        pass
+
+    def run_full_scan(self, cancel_event=None):
+        raise RuntimeError("harness scanner called")
+
+cli.Scanner = FailingScanner
+raise SystemExit(cli.main(["scan"]))
+"""
 
 
-def run_cli(tmp_path: Path, *args: str, test_scan: bool = False) -> subprocess.CompletedProcess[str]:
+def run_cli(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ | {"LOCALAPPDATA": str(tmp_path)}
-    if test_scan:
-        env["WINCAREPRO_GUIDED_CARE_TEST_SCAN"] = "1"
     return subprocess.run(
         [sys.executable, str(CLI), *args],
         cwd=ROOT,
         capture_output=True,
         text=True,
         env=env,
+        check=False,
+    )
+
+
+def run_harness(tmp_path: Path, source: str, **env_vars: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-c", source],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env=os.environ | {"LOCALAPPDATA": str(tmp_path)} | env_vars,
         check=False,
     )
 
@@ -85,7 +120,7 @@ def test_scan_cancellation_records_a_local_timeline_event(tmp_path):
 
 
 def test_plain_scan_persists_the_dashboard_snapshot_and_completion_event(tmp_path):
-    result = run_cli(tmp_path, "scan", test_scan=True)
+    result = run_harness(tmp_path, SUCCESSFUL_SCAN_HARNESS)
 
     assert result.returncode == 0, result.stderr
     payload = json_stdout(result)
@@ -97,6 +132,13 @@ def test_plain_scan_persists_the_dashboard_snapshot_and_completion_event(tmp_pat
     assert dashboard["health_score"] == payload["data"]["health_score"]
     timeline = json_stdout(run_cli(tmp_path, "timeline"))["data"]["events"]
     assert timeline[-1]["event"] == "scan_completed"
+
+
+def test_environment_cannot_fabricate_a_successful_scan(tmp_path):
+    result = run_harness(tmp_path, ENV_GATE_HARNESS, WINCAREPRO_GUIDED_CARE_TEST_SCAN="1")
+
+    assert result.returncode == 1
+    assert json_stdout(result)["error"]["code"] == "runtime_error"
 
 
 def test_dashboard_works_with_an_empty_store(tmp_path):

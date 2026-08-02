@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
-import os
 import sys
 import threading
 from typing import Any, Sequence
@@ -18,7 +17,6 @@ from guided_care import CareProfiles, CareSnapshot, CareStore, WeeklyReport
 
 SCHEMA_VERSION = 1
 COMMANDS = ("dashboard", "scan", "profiles", "timeline", "weekly-report")
-TEST_SCAN_ENV = "WINCAREPRO_GUIDED_CARE_TEST_SCAN"
 
 
 class InputError(ValueError):
@@ -56,25 +54,11 @@ def dashboard(store: CareStore) -> dict[str, Any]:
     }
 
 
-def _test_scan_result() -> tuple[list[dict[str, str]], dict[str, int], int, list[str]] | None:
-    if os.environ.get(TEST_SCAN_ENV) == "1" and os.environ.get("PYTEST_CURRENT_TEST"):
-        return (
-            [{"severity": "OK", "category": "Guided Care", "title": "Fixed test scan completed", "recommendation": "No action needed."}],
-            {"cpu_pct": 10, "ram_pct": 20, "disk_free_pct": 50},
-            100,
-            [],
-        )
-    return None
-
-
 def scan(store: CareStore, cancelled: bool) -> dict[str, Any]:
     if cancelled:
         store.append_event("scan_cancelled", {"status": "cancelled", "findings_count": 0})
         return {"status": "cancelled", "findings": [], "metrics": {}, "health_score": 100, "breakdown": []}
-    result = _test_scan_result()
-    if result is None:
-        result = Scanner(AppLogger()).run_full_scan(cancel_event=threading.Event())
-    findings, metrics, score, breakdown = result
+    findings, metrics, score, breakdown = Scanner(AppLogger()).run_full_scan(cancel_event=threading.Event())
     snapshot = CareSnapshot(_now(), {**metrics, "health_score": score}, tuple(findings))
     store.save_snapshot(snapshot)
     store.append_event("scan_completed", {"status": "completed", "findings_count": len(findings), "health_score": score})
