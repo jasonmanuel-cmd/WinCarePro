@@ -28,238 +28,126 @@ if os.name == "nt":
 else:
     winreg = None
 
+from core.platform import (
+    get_appdata_roaming, get_appdata_local, get_temp_dir, get_packages_dir,
+    get_programdata, get_windir
+)
+
 # Flag to prevent console window flashing during subprocess calls on Windows
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
-# ==============================================================================
-# Known Pre-installed Windows UWP Bloatware Database
-# ==============================================================================
-KNOWN_UWP_BLOAT = {
-    "Microsoft.XboxApp": {
-        "name": "Xbox Console Companion",
-        "category": "Gaming & Xbox",
-        "description": "Legacy Xbox companion app. Safe to remove if not using Xbox features.",
-        "recommended_remove": True
-    },
-    "Microsoft.GamingApp": {
-        "name": "Xbox App",
-        "category": "Gaming & Xbox",
-        "description": "Xbox Game Pass & PC Gaming Hub.",
-        "recommended_remove": False
-    },
-    "Microsoft.XboxGamingOverlay": {
-        "name": "Xbox Game Bar Plugin",
-        "category": "Gaming & Xbox",
-        "description": "Overlay for Xbox recording and social features.",
-        "recommended_remove": True
-    },
-    "Microsoft.XboxSpeechToTextOverlay": {
-        "name": "Xbox Speech-to-Text Overlay",
-        "category": "Gaming & Xbox",
-        "description": "Accessibility speech-to-text overlay for Xbox games.",
-        "recommended_remove": True
-    },
-    "Microsoft.XboxTCUI": {
-        "name": "Xbox TCUI",
-        "category": "Gaming & Xbox",
-        "description": "Xbox Text and Conversation User Interface.",
-        "recommended_remove": True
-    },
-    "Microsoft.MicrosoftSolitaireCollection": {
-        "name": "Microsoft Solitaire Collection",
-        "category": "Games",
-        "description": "Preinstalled Solitaire game collection with ads.",
-        "recommended_remove": True
-    },
-    "Microsoft.BingNews": {
-        "name": "Microsoft News / MSN News",
-        "category": "News & Weather",
-        "description": "MSN News newsfeed and news app.",
-        "recommended_remove": True
-    },
-    "Microsoft.BingWeather": {
-        "name": "MSN Weather",
-        "category": "News & Weather",
-        "description": "Weather forecast application.",
-        "recommended_remove": True
-    },
-    "Microsoft.BingSports": {
-        "name": "MSN Sports",
-        "category": "News & Weather",
-        "description": "Sports scores and sports news application.",
-        "recommended_remove": True
-    },
-    "Microsoft.BingFinance": {
-        "name": "MSN Money",
-        "category": "News & Weather",
-        "description": "Stock market and finance tracker.",
-        "recommended_remove": True
-    },
-    "Microsoft.YourPhone": {
-        "name": "Phone Link / Your Phone",
-        "category": "Communication",
-        "description": "Syncs Android/iPhone calls, texts, and notifications.",
-        "recommended_remove": True
-    },
-    "Microsoft.MicrosoftOfficeHub": {
-        "name": "Microsoft 365 / Office Hub",
-        "category": "Productivity",
-        "description": "Office web launcher and promotion app.",
-        "recommended_remove": True
-    },
-    "Microsoft.GetHelp": {
-        "name": "Get Help",
-        "category": "System Utilities",
-        "description": "Online Microsoft support assistant.",
-        "recommended_remove": True
-    },
-    "Microsoft.Getstarted": {
-        "name": "Tips / Get Started",
-        "category": "System Utilities",
-        "description": "Windows introductory tips and tutorials.",
-        "recommended_remove": True
-    },
-    "Microsoft.WindowsMaps": {
-        "name": "Windows Maps",
-        "category": "Navigation",
-        "description": "Offline and online desktop maps application.",
-        "recommended_remove": True
-    },
-    "Microsoft.549981C6F5B10": {
-        "name": "Cortana",
-        "category": "Virtual Assistant",
-        "description": "Deprecated Microsoft digital voice assistant.",
-        "recommended_remove": True
-    },
-    "Microsoft.SkypeApp": {
-        "name": "Skype",
-        "category": "Communication",
-        "description": "Skype messaging and video calls.",
-        "recommended_remove": True
-    },
-    "Microsoft.ZuneVideo": {
-        "name": "Films & TV / Movies & TV",
-        "category": "Media",
-        "description": "Default Windows video player.",
-        "recommended_remove": True
-    },
-    "Microsoft.ZuneMusic": {
-        "name": "Groove Music / Media Player",
-        "category": "Media",
-        "description": "Default Windows audio player.",
-        "recommended_remove": False
-    },
-    "Microsoft.People": {
-        "name": "Microsoft People",
-        "category": "Communication",
-        "description": "Contacts management application.",
-        "recommended_remove": True
-    },
-    "Microsoft.WindowsFeedbackHub": {
-        "name": "Feedback Hub",
-        "category": "Telemetry",
-        "description": "Sends user feedback and telemetry to Microsoft.",
-        "recommended_remove": True
-    },
-    "Microsoft.MicrosoftStickyNotes": {
-        "name": "Sticky Notes",
-        "category": "Productivity",
-        "description": "Desktop sticky notes application.",
-        "recommended_remove": False
-    },
-    "Microsoft.WindowsSoundRecorder": {
-        "name": "Sound Recorder",
-        "category": "Media",
-        "description": "Audio recording utility.",
-        "recommended_remove": False
-    },
-    "Microsoft.Todos": {
-        "name": "Microsoft To Do",
-        "category": "Productivity",
-        "description": "Task management and list application.",
-        "recommended_remove": False
-    },
-    "Microsoft.PowerAutomateDesktop": {
-        "name": "Power Automate Desktop",
-        "category": "Productivity",
-        "description": "RPA workflow automation utility.",
-        "recommended_remove": True
-    },
-    "Microsoft.Paint3D": {
-        "name": "Paint 3D",
-        "category": "Graphics",
-        "description": "3D modeling and drawing tool.",
-        "recommended_remove": True
-    },
-    "Microsoft.3DBuilder": {
-        "name": "3D Builder",
-        "category": "Graphics",
-        "description": "3D printing and viewing application.",
-        "recommended_remove": True
-    },
-    "Microsoft.3DViewer": {
-        "name": "3D Viewer",
-        "category": "Graphics",
-        "description": "Viewer for 3D graphics models.",
-        "recommended_remove": True
-    },
-    "Microsoft.MixedReality.Portal": {
-        "name": "Mixed Reality Portal",
-        "category": "VR / AR",
-        "description": "Headset driver and environment for Windows Mixed Reality.",
-        "recommended_remove": True
-    },
-    "Clipchamp.Clipchamp": {
-        "name": "Clipchamp Video Editor",
-        "category": "Media",
-        "description": "Web-based video editor bundled with Windows 11.",
-        "recommended_remove": True
-    },
-    "SpotifyAB.SpotifyMusic": {
-        "name": "Spotify Music",
-        "category": "Media",
-        "description": "Preinstalled Spotify music streaming client.",
-        "recommended_remove": True
-    },
-    "Disney.37853FC22B2CE": {
-        "name": "Disney+",
-        "category": "Sponsored",
-        "description": "Sponsored Disney+ app placeholder.",
-        "recommended_remove": True
-    },
-    "C27EB4BA.DropboxOEM": {
-        "name": "Dropbox OEM",
-        "category": "Sponsored / OEM",
-        "description": "Preinstalled Dropbox promotion app.",
-        "recommended_remove": True
-    },
-    "Enflick.TextNow-UnlimitedTextCalls": {
-        "name": "TextNow",
-        "category": "Sponsored",
-        "description": "Preinstalled TextNow messaging app.",
-        "recommended_remove": True
+
+def _load_bloatware_db() -> tuple[dict, list, set]:
+    """
+    Load bloatware database from data/bloatware.json with fallback to hardcoded defaults.
+    Returns (known_bloat, bloat_patterns, essential_packages).
+    """
+    # Hardcoded fallbacks (must match data/bloatware.json)
+    HARDCODED_KNOWN = {
+        "Microsoft.XboxApp": {"name": "Xbox Console Companion", "category": "Gaming & Xbox",
+                              "description": "Legacy Xbox companion app. Safe to remove if not using Xbox features.", "recommended_remove": True},
+        "Microsoft.GamingApp": {"name": "Xbox App", "category": "Gaming & Xbox",
+                                "description": "Xbox Game Pass & PC Gaming Hub.", "recommended_remove": False},
+        "Microsoft.XboxGamingOverlay": {"name": "Xbox Game Bar Plugin", "category": "Gaming & Xbox",
+                                        "description": "Overlay for Xbox recording and social features.", "recommended_remove": True},
+        "Microsoft.XboxSpeechToTextOverlay": {"name": "Xbox Speech-to-Text Overlay", "category": "Gaming & Xbox",
+                                              "description": "Accessibility speech-to-text overlay for Xbox games.", "recommended_remove": True},
+        "Microsoft.XboxTCUI": {"name": "Xbox TCUI", "category": "Gaming & Xbox",
+                               "description": "Xbox Text and Conversation User Interface.", "recommended_remove": True},
+        "Microsoft.MicrosoftSolitaireCollection": {"name": "Microsoft Solitaire Collection", "category": "Games",
+                                                   "description": "Preinstalled Solitaire game collection with ads.", "recommended_remove": True},
+        "Microsoft.BingNews": {"name": "Microsoft News / MSN News", "category": "News & Weather",
+                               "description": "MSN News newsfeed and news app.", "recommended_remove": True},
+        "Microsoft.BingWeather": {"name": "MSN Weather", "category": "News & Weather",
+                                  "description": "Weather forecast application.", "recommended_remove": True},
+        "Microsoft.BingSports": {"name": "MSN Sports", "category": "News & Weather",
+                                 "description": "Sports scores and sports news application.", "recommended_remove": True},
+        "Microsoft.BingFinance": {"name": "MSN Money", "category": "News & Weather",
+                                  "description": "Stock market and finance tracker.", "recommended_remove": True},
+        "Microsoft.YourPhone": {"name": "Phone Link / Your Phone", "category": "Communication",
+                                "description": "Syncs Android/iPhone calls, texts, and notifications.", "recommended_remove": True},
+        "Microsoft.MicrosoftOfficeHub": {"name": "Microsoft 365 / Office Hub", "category": "Productivity",
+                                         "description": "Office web launcher and promotion app.", "recommended_remove": True},
+        "Microsoft.GetHelp": {"name": "Get Help", "category": "System Utilities",
+                              "description": "Online Microsoft support assistant.", "recommended_remove": True},
+        "Microsoft.Getstarted": {"name": "Tips / Get Started", "category": "System Utilities",
+                                 "description": "Windows introductory tips and tutorials.", "recommended_remove": True},
+        "Microsoft.WindowsMaps": {"name": "Windows Maps", "category": "Navigation",
+                                  "description": "Offline and online desktop maps application.", "recommended_remove": True},
+        "Microsoft.549981C6F5B10": {"name": "Cortana", "category": "Virtual Assistant",
+                                    "description": "Deprecated Microsoft digital voice assistant.", "recommended_remove": True},
+        "Microsoft.SkypeApp": {"name": "Skype", "category": "Communication",
+                               "description": "Skype messaging and video calls.", "recommended_remove": True},
+        "Microsoft.ZuneVideo": {"name": "Films & TV / Movies & TV", "category": "Media",
+                                "description": "Default Windows video player.", "recommended_remove": True},
+        "Microsoft.ZuneMusic": {"name": "Groove Music / Media Player", "category": "Media",
+                                "description": "Default Windows audio player.", "recommended_remove": False},
+        "Microsoft.People": {"name": "Microsoft People", "category": "Communication",
+                             "description": "Contacts management application.", "recommended_remove": True},
+        "Microsoft.WindowsFeedbackHub": {"name": "Feedback Hub", "category": "Telemetry",
+                                         "description": "Sends user feedback and telemetry to Microsoft.", "recommended_remove": True},
+        "Microsoft.MicrosoftStickyNotes": {"name": "Sticky Notes", "category": "Productivity",
+                                           "description": "Desktop sticky notes application.", "recommended_remove": False},
+        "Microsoft.WindowsSoundRecorder": {"name": "Sound Recorder", "category": "Media",
+                                           "description": "Audio recording utility.", "recommended_remove": False},
+        "Microsoft.Todos": {"name": "Microsoft To Do", "category": "Productivity",
+                            "description": "Task management and list application.", "recommended_remove": False},
+        "Microsoft.PowerAutomateDesktop": {"name": "Power Automate Desktop", "category": "Productivity",
+                                           "description": "RPA workflow automation utility.", "recommended_remove": True},
+        "Microsoft.Paint3D": {"name": "Paint 3D", "category": "Graphics",
+                              "description": "3D modeling and drawing tool.", "recommended_remove": True},
+        "Microsoft.3DBuilder": {"name": "3D Builder", "category": "Graphics",
+                                "description": "3D printing and viewing application.", "recommended_remove": True},
+        "Microsoft.3DViewer": {"name": "3D Viewer", "category": "Graphics",
+                               "description": "Viewer for 3D graphics models.", "recommended_remove": True},
+        "Microsoft.MixedReality.Portal": {"name": "Mixed Reality Portal", "category": "VR / AR",
+                                          "description": "Headset driver and environment for Windows Mixed Reality.", "recommended_remove": True},
+        "Clipchamp.Clipchamp": {"name": "Clipchamp Video Editor", "category": "Media",
+                                "description": "Web-based video editor bundled with Windows 11.", "recommended_remove": True},
+        "SpotifyAB.SpotifyMusic": {"name": "Spotify Music", "category": "Media",
+                                   "description": "Preinstalled Spotify music streaming client.", "recommended_remove": True},
+        "Disney.37853FC22B2CE": {"name": "Disney+", "category": "Sponsored",
+                                 "description": "Sponsored Disney+ app placeholder.", "recommended_remove": True},
+        "C27EB4BA.DropboxOEM": {"name": "Dropbox OEM", "category": "Sponsored / OEM",
+                                "description": "Preinstalled Dropbox promotion app.", "recommended_remove": True},
+        "Enflick.TextNow-UnlimitedTextCalls": {"name": "TextNow", "category": "Sponsored",
+                                               "description": "Preinstalled TextNow messaging app.", "recommended_remove": True}
     }
-}
+    HARDCODED_PATTERNS = [
+        r"candycrush", r"king\.com", r"disney", r"tiktok", r"facebook", r"instagram",
+        r"cyberlink", r"wildtangent", r"mcafee", r"norton", r"expressvpn",
+        r"hpprivacy", r"hpinc\.energystar", r"hpsupportassistant", r"smartthings"
+    ]
+    HARDCODED_ESSENTIAL = {
+        "microsoft.windowsstore", "microsoft.desktopappinstaller", "microsoft.windowsterminal",
+        "microsoft.windowscamera", "microsoft.windows.photos", "microsoft.windowscalculator",
+        "microsoft.windowsnotepad", "microsoft.paint", "microsoft.storepurchaseapp",
+        "microsoft.sechealthui", "microsoft.cred-dialoghost", "microsoft.bioenrollment"
+    }
 
-# Substring patterns for third-party or OEM bloatware packages
-BLOAT_PATTERNS = [
-    r"candycrush", r"king\.com", r"disney", r"tiktok", r"facebook", r"instagram",
-    r"cyberlink", r"wildtangent", r"mcafee", r"norton", r"expressvpn",
-    r"hpprivacy", r"hpinc\.energystar", r"hpsupportassistant", r"smartthings"
-]
-
-# Essential packages that must NEVER be flagged or deleted as bloatware
-ESSENTIAL_PACKAGES = {
-    "microsoft.windowsstore", "microsoft.desktopappinstaller", "microsoft.windowsterminal",
-    "microsoft.windowscamera", "microsoft.windows.photos", "microsoft.windowscalculator",
-    "microsoft.windowsnotepad", "microsoft.paint", "microsoft.storepurchaseapp",
-    "microsoft.sechealthui", "microsoft.cred-dialoghost", "microsoft.bioenrollment"
-}
+    try:
+        json_path = Path(__file__).parent / "data" / "bloatware.json"
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            known = data.get("known_bloat", HARDCODED_KNOWN)
+            patterns = data.get("bloat_patterns", HARDCODED_PATTERNS)
+            essential = set(data.get("essential_packages", HARDCODED_ESSENTIAL))
+            return known, patterns, essential
+    except Exception:
+        pass
+    return HARDCODED_KNOWN, HARDCODED_PATTERNS, HARDCODED_ESSENTIAL
 
 
-def run_powershell_cmd(cmd: str, timeout: int = 45) -> tuple[int, str, str]:
+# Load database (import-time for backwards compatibility)
+KNOWN_UWP_BLOAT, BLOAT_PATTERNS, ESSENTIAL_PACKAGES = _load_bloatware_db()
+
+
+def run_powershell_cmd(cmd: str, timeout: int = 45, *args) -> tuple[int, str, str]:
     """
     Executes a PowerShell command safely without displaying or flashing a console window.
+    Extra positional *args are appended AFTER the -Command string so the script can
+    read them via $args[0], $args[1], ... (command-injection-safe, see core/shell).
     """
     try:
         ps_args = [
@@ -269,6 +157,7 @@ def run_powershell_cmd(cmd: str, timeout: int = 45) -> tuple[int, str, str]:
             "-ExecutionPolicy", "Bypass",
             "-Command", cmd
         ]
+        ps_args.extend(str(a) for a in args)
         res = subprocess.run(
             ps_args,
             stdout=subprocess.PIPE,
@@ -342,14 +231,14 @@ class BloatRemover:
     """
 
     def __init__(self):
-        self._user_appdata_roaming = os.environ.get("APPDATA", "")
-        self._user_appdata_local = os.environ.get("LOCALAPPDATA", "")
-        self._temp_dir = os.environ.get("TEMP", os.path.join(self._user_appdata_local, "Temp"))
-        self._packages_dir = os.path.join(self._user_appdata_local, "Packages")
-        self._programdata_dir = os.environ.get("PROGRAMDATA", "C:\\ProgramData")
+        self._user_appdata_roaming = str(get_appdata_roaming())
+        self._user_appdata_local = str(get_appdata_local())
+        self._temp_dir = str(get_temp_dir())
+        self._packages_dir = str(get_packages_dir())
+        self._programdata_dir = str(get_programdata())
 
         # System paths that are FORBIDDEN from deletion
-        user_home = os.path.expanduser("~")
+        user_home = Path.home()
         self._forbidden_paths = {
             os.path.abspath(p).lower() for p in [
                 "c:\\",
@@ -359,7 +248,7 @@ class BloatRemover:
                 "c:\\program files (x86)",
                 "c:\\users",
                 "c:\\programdata",
-                user_home,
+                str(user_home),
                 self._user_appdata_roaming,
                 self._user_appdata_local,
                 self._packages_dir,
@@ -380,7 +269,7 @@ class BloatRemover:
                 self._packages_dir,
                 self._temp_dir,
                 self._programdata_dir,
-                "c:\\windows\\temp"
+                os.path.join(get_windir(), "Temp")
             ] if p
         ]
 
@@ -505,7 +394,7 @@ class BloatRemover:
 
         safe_pkg = package_name.replace("'", "''")
         ps_cmd = (
-            f"$pkg = '{safe_pkg}'; "
+            "$pkg = $args[0]; "
             f"$matched = Get-AppxPackage -AllUsers | Where-Object {{ $_.Name -eq $pkg -or $_.PackageFullName -eq $pkg -or $_.PackageFamilyName -eq $pkg }}; "
             f"if (-not $matched) {{ $matched = Get-AppxPackage | Where-Object {{ $_.Name -eq $pkg -or $_.PackageFullName -eq $pkg -or $_.PackageFamilyName -eq $pkg }} }}; "
             f"if ($matched) {{ "
@@ -514,7 +403,7 @@ class BloatRemover:
             f"}} else {{ Write-Error 'PACKAGE_NOT_FOUND' }}"
         )
 
-        code, stdout, stderr = run_powershell_cmd(ps_cmd, timeout=60)
+        code, stdout, stderr = run_powershell_cmd(ps_cmd, 60, safe_pkg)
 
         if "SUCCESS" in stdout:
             msg = f"Successfully uninstalled UWP app '{package_name}'."

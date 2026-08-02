@@ -1,0 +1,219 @@
+{
+  "known_bloat": {
+    "Microsoft.XboxApp": {
+      "name": "Xbox Console Companion",
+      "category": "Gaming & Xbox",
+      "description": "Legacy Xbox companion app. Safe to remove if not using Xbox features.",
+      "recommended_remove": true
+    },
+    "Microsoft.GamingApp": {
+      "name": "Xbox App",
+      "category": "Gaming & Xbox",
+      "description": "Xbox Game Pass & PC Gaming Hub.",
+      "recommended_remove": false
+    },
+    "Microsoft.XboxGamingOverlay": {
+      "name": "Xbox Game Bar Plugin",
+      "category": "Gaming & Xbox",
+      "description": "Overlay for Xbox recording and social features.",
+      "recommended_remove": true
+    },
+    "Microsoft.XboxSpeechToTextOverlay": {
+      "name": "Xbox Speech-to-Text Overlay",
+      "category": "Gaming & Xbox",
+      "description": "Accessibility speech-to-text overlay for Xbox games.",
+      "recommended_remove": true
+    },
+    "Microsoft.XboxTCUI": {
+      "name": "Xbox TCUI",
+      "category": "Gaming & Xbox",
+      "description": "Xbox Text and Conversation User Interface.",
+      "recommended_remove": true
+    },
+    "Microsoft.MicrosoftSolitaireCollection": {
+      "name": "Microsoft Solitaire Collection",
+      "category": "Games",
+      "description": "Preinstalled Solitaire game collection with ads.",
+      "recommended_remove": true
+    },
+    "Microsoft.BingNews": {
+      "name": "Microsoft News / MSN News",
+      "category": "News & Weather",
+      "description": "MSN News newsfeed and news app.",
+      "recommended_remove": true
+    },
+    "Microsoft.BingWeather": {
+      "name": "MSN Weather",
+      "category": "News & Weather",
+      "description": "Weather forecast application.",
+      "recommended_remove": true
+    },
+    "Microsoft.BingSports": {
+      "name": "MSN Sports",
+      "category": "News & Weather",
+      "description": "Sports scores and sports news application.",
+      "recommended_remove": true
+    },
+    "Microsoft.BingFinance": {
+      "name": "MSN Money",
+      "category": "News & Weather",
+      "description": "Stock market and finance tracker.",
+      "recommended_remove": true
+    },
+    "Microsoft.YourPhone": {
+      "name": "Phone Link / Your Phone",
+      "category": "Communication",
+      "description": "Syncs Android/iPhone calls, texts, and notifications.",
+      "recommended_remove": true
+    },
+    "Microsoft.MicrosoftOfficeHub": {
+      "name": "Microsoft 365 / Office Hub",
+      "category": "Productivity",
+      "description": "Office web launcher and promotion app.",
+      "recommended_remove": true
+    },
+    "Microsoft.GetHelp": {
+      "name": "Get Help",
+      "category": "System Utilities",
+      "description": "Online Microsoft support assistant.",
+      "recommended_remove": true
+    },
+    "Microsoft.Getstarted": {
+      "name": "Tips / Get Started",
+      "category": "System Utilities",
+      "description": "Windows introductory tips and tutorials.",
+      "recommended_remove": true
+    },
+    "Microsoft.WindowsMaps": {
+      "name": "Windows Maps",
+      "category": "Navigation",
+      "description": "Offline and online desktop maps application.",
+      "recommended_remove": true
+    },
+    "Microsoft.549981C6F5B10": {
+      "name": "Cortana",
+      "category": "Virtual Assistant",
+      "description": "Deprecated Microsoft digital voice assistant.",
+      "recommended_remove": true
+    },
+    "Microsoft.SkypeApp": {
+      "name": "Skype",
+      "category": "Communication",
+      "description": "Skype messaging and video calls.",
+      "recommended_remove": true
+    },
+    "Microsoft.ZuneVideo": {
+      "name": "Films & TV / Movies & TV",
+      "category": "Media",
+      "description": "Default Windows video player.",
+      "recommended_remove": true
+    },
+    "Microsoft.ZuneMusic": {
+      "name": "Groove Music / Media Player",
+      "category": "Media",
+      "description": "Default Windows audio player.",
+      "recommended_remove": false
+    },
+    "Microsoft.People": {
+      "name": "Microsoft People",
+      "category": "Communication",
+      "description": "Contacts management application.",
+      "recommended_remove": true
+    },
+    "Microsoft.WindowsFeedbackHub": {
+      "name": "Feedback Hub",
+      "category": "Telemetry",
+      "description": "Sends user feedback and telemetry to Microsoft.",
+      "recommended_remove": true
+    },
+    "Microsoft.MicrosoftStickyNotes": {
+      "name": "Sticky Notes",
+      "category": "Productivity",
+      "description": "Desktop sticky notes application.",
+      "recommended_remove": false
+    },
+    "Microsoft.WindowsSoundRecorder": {
+      "name": "Sound Recorder",
+      "category": "Media",
+      "description": "Audio recording utility.",
+      "recommended_remove": false
+    },
+    "Microsoft.Todos": {
+      "name": "Microsoft To Do",
+      "category": "Productivity",
+      "description": "Task management and list application.",
+      "recommended_remove": false
+    },
+    "Microsoft.PowerAutomateDesktop": {
+      "name": "Power Automate Desktop",
+      "category": "Productivity",
+      "description": "RPA workflow automation utility.",
+      "recommended_remove": true
+    },
+    "Microsoft.Paint3D": {
+      "name": "Paint 3D",
+      "category": "Graphics",
+      "description": "3D modeling and drawing tool.",
+      "recommended_remove": true
+    },
+    "Microsoft.3DBuilder": {
+      "name": "3D Builder",
+      "category": "Graphics",
+      "description": "3D printing and viewing application.",
+      "recommended_remove": true
+    },
+    "Microsoft.3DViewer": {
+      "name": "3D Viewer",
+      "category": "Graphics",
+      "description": "Viewer for 3D graphics models.",
+      "recommended_remove": true
+    },
+    "Microsoft.MixedReality.Portal": {
+      "name": "Mixed Reality Portal",
+      "category": "VR / AR",
+      "description": "Headset driver and environment for Windows Mixed Reality.",
+      "recommended_remove": true
+    },
+    "Clipchamp.Clipchamp": {
+      "name": "Clipchamp Video Editor",
+      "category": "Media",
+      "description": "Web-based video editor bundled with Windows 11.",
+      "recommended_remove": true
+    },
+    "SpotifyAB.SpotifyMusic": {
+      "name": "Spotify Music",
+      "category": "Media",
+      "description": "Preinstalled Spotify music streaming client.",
+      "recommended_remove": true
+    },
+    "Disney.37853FC22B2CE": {
+      "name": "Disney+",
+      "category": "Sponsored",
+      "description": "Sponsored Disney+ app placeholder.",
+      "recommended_remove": true
+    },
+    "C27EB4BA.DropboxOEM": {
+      "name": "Dropbox OEM",
+      "category": "Sponsored / OEM",
+      "description": "Preinstalled Dropbox promotion app.",
+      "recommended_remove": true
+    },
+    "Enflick.TextNow-UnlimitedTextCalls": {
+      "name": "TextNow",
+      "category": "Sponsored",
+      "description": "Preinstalled TextNow messaging app.",
+      "recommended_remove": true
+    }
+  },
+  "bloat_patterns": [
+    "candycrush", "king.com", "disney", "tiktok", "facebook", "instagram",
+    "cyberlink", "wildtangent", "mcafee", "norton", "expressvpn",
+    "hpprivacy", "hpinc.energystar", "hpsupportassistant", "smartthings"
+  ],
+  "essential_packages": [
+    "microsoft.windowsstore", "microsoft.desktopappinstaller", "microsoft.windowsterminal",
+    "microsoft.windowscamera", "microsoft.windows.photos", "microsoft.windowscalculator",
+    "microsoft.windowsnotepad", "microsoft.paint", "microsoft.storepurchaseapp",
+    "microsoft.sechealthui", "microsoft.cred-dialoghost", "microsoft.bioenrollment"
+  ]
+}

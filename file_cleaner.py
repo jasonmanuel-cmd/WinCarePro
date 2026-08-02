@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Callable, Iterable
 
+from core.platform import get_appdata_roaming, get_appdata_local, get_temp_dir, get_packages_dir, get_programdata
+
 
 OLD_FILE_EXTENSIONS = {
     ".exe", ".msi", ".msix", ".appx", ".zip", ".7z", ".rar", ".iso",

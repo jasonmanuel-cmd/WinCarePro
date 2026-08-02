@@ -22,8 +22,12 @@ class PerformanceBoosterSecurityTests(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertIn("Failed to update DNS", message)
-        powershell_script = run.call_args_list[1].args[0][-1]
-        self.assertIn("bad''; Write-Output injected; ''", powershell_script)
+        # Verify positional args pattern: script uses $args[0], adapter passed separately
+        powershell_script = run.call_args_list[1].args[0][4]  # script is 5th element (index 4)
+        self.assertIn("$args[0]", powershell_script)
+        # Adapter passed as separate argument (not interpolated into script)
+        adapter_arg = run.call_args_list[1].args[0][5]  # 6th element
+        self.assertEqual(adapter_arg, adapter)
         for call in run.call_args_list:
             self.assertIsNot(call.kwargs.get("shell"), True)
 

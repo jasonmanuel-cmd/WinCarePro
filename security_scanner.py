@@ -60,17 +60,16 @@ class SecurityScanner:
         if os.name != "nt" or not file_path or not os.path.exists(file_path):
             return {"status": "NotSigned", "signer": "N/A", "valid": False}
 
-        safe_path = file_path.replace("'", "''")
         ps_script = (
-            f"$s=Get-AuthenticodeSignature -LiteralPath '{safe_path}';"
-            f"[pscustomobject]@{{"
-            f"Status=$s.Status.ToString();"
-            f"Subject=$s.SignerCertificate.Subject"
-            f"}}|ConvertTo-Json -Compress"
+            "$s=Get-AuthenticodeSignature -LiteralPath $args[0];"
+            "[pscustomobject]@{"
+            "Status=$s.Status.ToString();"
+            "Subject=$s.SignerCertificate.Subject"
+            "}|ConvertTo-Json -Compress"
         )
         try:
             p = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script, file_path],
                 capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW
             )
             if p.returncode == 0 and p.stdout.strip():

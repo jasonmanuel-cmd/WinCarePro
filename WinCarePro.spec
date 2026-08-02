@@ -9,7 +9,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('data/bloatware.json', 'data')],
     hiddenimports=[
         'winreg',
         'ctypes',

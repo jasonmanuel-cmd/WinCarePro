@@ -14,7 +14,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+from core.platform import get_system_temp_roots, get_windir
+from core.shell import safe_ps
 
 
 class DiskAnalyzer:
@@ -128,14 +129,7 @@ class DiskAnalyzer:
         waste_items = []
         total_waste_bytes = 0
 
-        temp_dirs = [
-            ("Windows Temp", os.environ.get("WINDIR", "C:\\Windows") + "\\Temp"),
-            ("User Temp", os.environ.get("TEMP", "C:\\Users\\Default\\AppData\\Local\\Temp")),
-            ("Prefetch Cache", os.environ.get("WINDIR", "C:\\Windows") + "\\Prefetch"),
-            ("SoftwareDistribution (Update Cache)", os.environ.get("WINDIR", "C:\\Windows") + "\\SoftwareDistribution\\Download")
-        ]
-
-        for name, path in temp_dirs:
+        for name, path in get_system_temp_roots():
             p = Path(path)
             if p.exists():
                 dir_sz = 0

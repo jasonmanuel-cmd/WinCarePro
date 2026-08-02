@@ -361,17 +361,16 @@ class PerformanceBooster:
 
         for adapter in adapters:
             success = False
-            safe_adapter = adapter.replace("'", "''")
 
             if key == "dhcp":
                 # Reset to DHCP automatic DNS
                 ps_cmd = (
-                    f"Set-DnsClientServerAddress -InterfaceAlias "
-                    f"'{safe_adapter}' -ResetServerAddresses"
+                    "Set-DnsClientServerAddress -InterfaceAlias $args[0] "
+                    "-ResetServerAddresses"
                 )
                 try:
                     r = subprocess.run(
-                        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+                        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd, adapter],
                         capture_output=True,
                         text=True,
                         creationflags=CREATE_NO_WINDOW,
@@ -399,12 +398,12 @@ class PerformanceBooster:
                 servers = preset["servers"]
                 formatted_servers = ', '.join([f'"{s}"' for s in servers])
                 ps_cmd = (
-                    f"Set-DnsClientServerAddress -InterfaceAlias "
-                    f"'{safe_adapter}' -ServerAddresses ({formatted_servers})"
+                    "Set-DnsClientServerAddress -InterfaceAlias $args[0] "
+                    "-ServerAddresses ($args[1])"
                 )
                 try:
                     r = subprocess.run(
-                        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+                        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd, adapter, formatted_servers],
                         capture_output=True,
                         text=True,
                         creationflags=CREATE_NO_WINDOW,
