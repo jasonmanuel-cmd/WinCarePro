@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -8,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 
@@ -16,12 +18,26 @@ namespace WinCarePro.Desktop;
 public partial class MainWindow : Window
 {
     private const int BridgeSchemaVersion = 1;
-    private static readonly TimeSpan BridgeTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(30);
     private static readonly HashSet<string> BridgeCommands =
         new(StringComparer.Ordinal) { "dashboard", "scan", "profiles", "timeline", "weekly-report" };
+    private static readonly HashSet<string> HealthGrades =
+        new(StringComparer.Ordinal) { "Excellent", "Good", "Fair", "Poor", "Critical" };
+    private static readonly HashSet<string> FindingSeverities =
+        new(StringComparer.OrdinalIgnoreCase) { "Critical", "Warning", "Info", "OK" };
+    private static readonly HashSet<string> ProfileIds =
+        new(StringComparer.Ordinal) { "gaming", "work", "privacy", "battery", "restore_defaults" };
+    private static readonly string[] TimestampFormats =
+    {
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'",
+        "yyyy-MM-dd'T'HH:mm:sszzz",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz",
+    };
 
     private CancellationTokenSource? _operationCancellation;
     private bool _operationRunning;
+    private bool _scanWasInterrupted;
 
     public ICommand DashboardCommand { get; }
     public ICommand ScanCommand { get; }
@@ -55,71 +71,88 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusText.Text = "Stopping at the next safe boundary…";
+        SetStatus("Stopping at the next safe boundary…");
         _operationCancellation.Cancel();
     }
 
     private void ProfileSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ProfileDetailText.Text = ProfileComboBox.SelectedItem is CareProfileOption profile
-            ? profile.Recommendation
-            : "No care profile selected.";
+        AutomationProperties.SetName(
+            ProfileComboBox,
+            ProfileComboBox.SelectedItem is CareProfileOption selected
+                ? $"Care profile: {selected.Title}"
+                : "Care profile: none selected");
+        SetAccessibleText(
+            ProfileDetailText,
+            "Selected profile recommendation",
+            ProfileComboBox.SelectedItem is CareProfileOption profile
+                ? profile.Recommendation
+                : "No care profile selected.");
     }
 
     private Task RefreshAsync() => RunOperationAsync(
         isScan: false,
         async token =>
         {
-            StatusText.Text = "Refreshing local Guided Care data…";
+            SetStatus("Refreshing local Guided Care data…");
             await LoadDashboardDataAsync(token);
-            StatusText.Text = "Guided Care is ready. Review the plan before opening the Safety Center.";
+            SetStatus("Guided Care is ready. Review the plan before opening the Safety Center.");
         });
 
     private Task StartScanAsync() => RunOperationAsync(
         isScan: true,
         async token =>
         {
-            StatusText.Text = "Running a read-only guided scan…";
-            _ = await RunBridgeAsync("scan", token);
+            SetStatus("Running a read-only guided scan…");
+            try
+            {
+                _ = await RunBridgeAsync("scan", token);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                _scanWasInterrupted = true;
+                throw;
+            }
             await LoadDashboardDataAsync(token);
-            StatusText.Text = "Scan complete. The ranked review plan and local proof history are updated.";
+            SetStatus("Scan complete. The ranked review plan and local proof history are updated.");
         });
 
     private async Task RunOperationAsync(bool isScan, Func<CancellationToken, Task> operation)
     {
         if (_operationRunning)
         {
-            StatusText.Text = "Guided Care is already working. Choose Stop before starting another operation.";
+            SetStatus("Guided Care is already working. Choose Stop before starting another operation.");
             return;
         }
 
         _operationRunning = true;
         _operationCancellation = new CancellationTokenSource();
+        using var timeout = new CancellationTokenSource(OperationTimeout);
+        using var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            _operationCancellation.Token,
+            timeout.Token);
+        _scanWasInterrupted = false;
         SetBusyState(true);
         try
         {
-            await operation(_operationCancellation.Token);
+            await operation(operationCancellation.Token);
         }
-        catch (OperationCanceledException) when (_operationCancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (_operationCancellation.IsCancellationRequested || timeout.IsCancellationRequested)
         {
-            var recorded = !isScan || await TryRecordScanCancellationAsync();
-            StatusText.Text = recorded
-                ? "Guided Care stopped. No repair action was started."
-                : "Guided Care stopped, but its cancellation could not be added to local history.";
+            var interruptedScan = isScan && _scanWasInterrupted;
+            var recorded = !interruptedScan || await TryRecordScanCancellationAsync();
+            var action = _operationCancellation.IsCancellationRequested ? "stopped" : "timed out after 30 seconds";
+            SetStatus(recorded
+                ? $"Guided Care {action}. No repair action was started."
+                : $"Guided Care {action}. No repair action was started, but the interrupted scan could not be added to local history.");
         }
-        catch (TimeoutException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or InvalidOperationException or Win32Exception)
         {
-            var recorded = !isScan || await TryRecordScanCancellationAsync();
-            StatusText.Text = recorded
-                ? "Guided Care timed out after 30 seconds. No repair action was started; retry when ready."
-                : "Guided Care timed out after 30 seconds. No repair action was started, but the timeout could not be added to local history.";
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or InvalidOperationException)
-        {
-            StatusText.Text = $"Guided Care could not load local data: {ex.Message}";
+            SetStatus($"Guided Care could not load local data: {ex.Message}");
         }
         finally
         {
+            _scanWasInterrupted = false;
             _operationCancellation.Dispose();
             _operationCancellation = null;
             _operationRunning = false;
@@ -149,29 +182,34 @@ public partial class MainWindow : Window
         var capturedAt = data.GetProperty("snapshot_captured_at");
         var timelineCount = data.GetProperty("timeline_count").GetInt32();
 
-        HealthScoreText.Text = healthScore.ToString("0", CultureInfo.CurrentCulture);
-        GradeText.Text = data.GetProperty("grade").GetString()!;
-
         var risks = findings.EnumerateArray()
             .Where(item => IsRisk(item.GetProperty("severity").GetString()))
             .ToList();
-        UrgentRiskCountText.Text = risks.Count.ToString(CultureInfo.CurrentCulture);
-        RecentChangeText.Text = capturedAt.ValueKind == JsonValueKind.Null
-            ? $"No scan yet · {timelineCount} history items"
-            : $"{capturedAt.GetString()} · {timelineCount} history items";
 
         if (capturedAt.ValueKind == JsonValueKind.Null)
         {
-            CarePlanList.ItemsSource = new[] { "No baseline yet. Start a guided scan to build a care plan." };
+            SetAccessibleText(HealthScoreText, "Health score", "Not scanned");
+            SetAccessibleText(GradeText, "Health grade", "Not available");
+            SetAccessibleText(UrgentRiskCountText, "Risks to review", "Unknown");
+            SetAccessibleText(RecentChangeText, "Latest baseline", $"No scan yet · {timelineCount} history items");
+            SetAccessibleList(
+                CarePlanList,
+                "Ranked care plan",
+                new[] { "No baseline yet. Start a guided scan to build a care plan." });
             return;
         }
 
-        CarePlanList.ItemsSource = risks.Count == 0
+        SetAccessibleText(HealthScoreText, "Health score", healthScore.ToString("0", CultureInfo.CurrentCulture));
+        SetAccessibleText(GradeText, "Health grade", data.GetProperty("grade").GetString()!);
+        SetAccessibleText(UrgentRiskCountText, "Risks to review", risks.Count.ToString(CultureInfo.CurrentCulture));
+        SetAccessibleText(RecentChangeText, "Latest baseline", $"{capturedAt.GetString()} · {timelineCount} history items");
+        var plan = risks.Count == 0
             ? new[] { "No critical or warning findings in the latest baseline." }
             : risks.Select((item, index) =>
                 $"{index + 1}. {item.GetProperty("severity").GetString()}: " +
                 $"{item.GetProperty("category").GetString()} — {item.GetProperty("title").GetString()}")
                 .ToArray();
+        SetAccessibleList(CarePlanList, "Ranked care plan", plan);
     }
 
     private void RenderProfiles(JsonElement data)
@@ -186,9 +224,14 @@ public partial class MainWindow : Window
 
         ProfileComboBox.ItemsSource = profiles;
         ProfileComboBox.SelectedItem = profiles.FirstOrDefault(profile => profile.Id == selectedId) ?? profiles.FirstOrDefault();
+        AutomationProperties.SetName(
+            ProfileComboBox,
+            ProfileComboBox.SelectedItem is CareProfileOption selected
+                ? $"Care profile: {selected.Title}"
+                : "Care profile: none available");
         if (profiles.Count == 0)
         {
-            ProfileDetailText.Text = "No care profiles are available.";
+            SetAccessibleText(ProfileDetailText, "Selected profile recommendation", "No care profiles are available.");
         }
     }
 
@@ -201,9 +244,9 @@ public partial class MainWindow : Window
             return $"{item.GetProperty("at").GetString()} · {item.GetProperty("event").GetString()}{detailStatus}";
         }).ToArray();
 
-        ProofTimelineList.ItemsSource = events.Length == 0
+        SetAccessibleList(ProofTimelineList, "Proof and activity timeline", events.Length == 0
             ? new[] { "No Guided Care activity has been recorded." }
-            : events;
+            : events);
     }
 
     private void RenderWeeklyReport(JsonElement data)
@@ -219,7 +262,26 @@ public partial class MainWindow : Window
             : $"Score {start:0} → {end:0} ({change:+0;-0;0}).";
         var riskSummary = risks.Length == 0 ? "No unresolved risks recorded." : $"Unresolved: {string.Join("; ", risks)}.";
 
-        WeeklyReportText.Text = $"{scoreSummary} Verified work: {completed}. {riskSummary} Next: {string.Join("; ", nextSteps)}";
+        SetAccessibleText(
+            WeeklyReportText,
+            "Weekly care report",
+            $"{scoreSummary} Verified work: {completed}. {riskSummary} Next: {string.Join("; ", nextSteps)}");
+    }
+
+    private void SetStatus(string message) => SetAccessibleText(StatusText, "Guided Care status", message);
+
+    private static void SetAccessibleText(TextBlock control, string label, string value)
+    {
+        control.Text = value;
+        AutomationProperties.SetName(control, $"{label}: {value}");
+    }
+
+    private static void SetAccessibleList(ListBox control, string label, string[] values)
+    {
+        control.ItemsSource = values;
+        AutomationProperties.SetName(
+            control,
+            values.Length == 0 ? $"{label}: empty" : $"{label}: {values.Length} items. {values[0]}");
     }
 
     private async Task<bool> TryRecordScanCancellationAsync()
@@ -230,7 +292,7 @@ public partial class MainWindow : Window
             _ = await RunBridgeAsync("scan", cancellation.Token, cancelledScan: true);
             return true;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or InvalidOperationException or TimeoutException or OperationCanceledException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or InvalidOperationException or Win32Exception or OperationCanceledException)
         {
             return false;
         }
@@ -265,24 +327,23 @@ public partial class MainWindow : Window
         }
 
         using var process = new Process { StartInfo = startInfo };
-        if (!process.Start())
+        try
         {
-            throw new IOException("The local Guided Care bridge did not start.");
+            if (!process.Start())
+            {
+                throw new IOException("The local Guided Care bridge did not start.");
+            }
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        {
+            throw new IOException("The local Guided Care bridge could not start.", ex);
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(BridgeTimeout);
         try
         {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            KillBridge(process);
-            await ObserveOutputAsync(stdoutTask, stderrTask);
-            throw new TimeoutException();
+            await process.WaitForExitAsync(cancellationToken);
         }
         catch
         {
@@ -338,11 +399,20 @@ public partial class MainWindow : Window
         {
             case "dashboard":
                 RequireNumber(data, "health_score", 0, 100);
-                RequireString(data, "grade");
+                if (!HealthGrades.Contains(RequireString(data, "grade")))
+                {
+                    throw new InvalidDataException("The health grade is not supported.");
+                }
                 RequireObjectProperty(data, "metrics");
-                ValidateFindings(RequireArray(data, "findings"));
-                RequireStringOrNull(data, "snapshot_captured_at");
+                var dashboardFindings = RequireArray(data, "findings");
+                ValidateFindings(dashboardFindings);
+                RequireTimestampOrNull(data, "snapshot_captured_at");
                 RequireInteger(data, "timeline_count", 0);
+                if (data.GetProperty("snapshot_captured_at").ValueKind == JsonValueKind.Null &&
+                    dashboardFindings.GetArrayLength() != 0)
+                {
+                    throw new InvalidDataException("An empty dashboard cannot contain findings.");
+                }
                 break;
             case "scan":
                 var status = RequireString(data, "status");
@@ -353,13 +423,16 @@ public partial class MainWindow : Window
                 ValidateFindings(RequireArray(data, "findings"));
                 RequireObjectProperty(data, "metrics");
                 RequireNumber(data, "health_score", 0, 100);
-                _ = RequireArray(data, "breakdown");
+                ValidateStringArray(RequireArray(data, "breakdown"), "scan breakdown");
                 break;
             case "profiles":
                 foreach (var profile in RequireArray(data, "profiles").EnumerateArray())
                 {
                     RequireObject(profile, "profile");
-                    RequireString(profile, "profile_id");
+                    if (!ProfileIds.Contains(RequireString(profile, "profile_id")))
+                    {
+                        throw new InvalidDataException("A care profile identifier is not supported.");
+                    }
                     RequireString(profile, "title");
                     RequireInteger(profile, "version", 1);
                     ValidateStringArray(RequireArray(profile, "recommendations"), "profile recommendations");
@@ -369,7 +442,7 @@ public partial class MainWindow : Window
                 foreach (var item in RequireArray(data, "events").EnumerateArray())
                 {
                     RequireObject(item, "timeline event");
-                    RequireString(item, "at");
+                    RequireTimestamp(item, "at");
                     RequireString(item, "event");
                     RequireObjectProperty(item, "detail");
                     if (item.GetProperty("detail").TryGetProperty("status", out var detailStatus) &&
@@ -380,9 +453,9 @@ public partial class MainWindow : Window
                 }
                 break;
             case "weekly-report":
-                RequireNumberOrNull(data, "score_start");
-                RequireNumberOrNull(data, "score_end");
-                RequireNumber(data, "score_change");
+                RequireNumberOrNull(data, "score_start", 0, 100);
+                RequireNumberOrNull(data, "score_end", 0, 100);
+                RequireNumber(data, "score_change", -100, 100);
                 RequireInteger(data, "completed_count", 0);
                 ValidateStringArray(RequireArray(data, "unresolved_risks"), "unresolved risks");
                 ValidateStringArray(RequireArray(data, "next_steps"), "next steps");
@@ -397,7 +470,10 @@ public partial class MainWindow : Window
         foreach (var finding in findings.EnumerateArray())
         {
             RequireObject(finding, "finding");
-            RequireString(finding, "severity");
+            if (!FindingSeverities.Contains(RequireString(finding, "severity")))
+            {
+                throw new InvalidDataException("A finding severity is not supported.");
+            }
             RequireString(finding, "category");
             RequireString(finding, "title");
         }
@@ -446,18 +522,36 @@ public partial class MainWindow : Window
         return value.GetString()!;
     }
 
-    private static void RequireStringOrNull(JsonElement parent, string name)
+    private static void RequireTimestampOrNull(JsonElement parent, string name)
     {
-        if (!parent.TryGetProperty(name, out var value) ||
-            value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+        if (!parent.TryGetProperty(name, out var value))
         {
             throw new InvalidDataException($"The local bridge field '{name}' is invalid.");
+        }
+        if (value.ValueKind != JsonValueKind.Null)
+        {
+            RequireTimestamp(parent, name);
+        }
+    }
+
+    private static void RequireTimestamp(JsonElement parent, string name)
+    {
+        var value = RequireString(parent, name);
+        if (!DateTimeOffset.TryParseExact(
+                value,
+                TimestampFormats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _))
+        {
+            throw new InvalidDataException($"The local bridge timestamp '{name}' is invalid.");
         }
     }
 
     private static void RequireInteger(JsonElement parent, string name, int minimum)
     {
-        if (!parent.TryGetProperty(name, out var value) || !value.TryGetInt32(out var parsed) || parsed < minimum)
+        if (!parent.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number ||
+            !value.TryGetInt32(out var parsed) || parsed < minimum)
         {
             throw new InvalidDataException($"The local bridge field '{name}' is invalid.");
         }
@@ -465,14 +559,15 @@ public partial class MainWindow : Window
 
     private static void RequireNumber(JsonElement parent, string name, double minimum = double.MinValue, double maximum = double.MaxValue)
     {
-        if (!parent.TryGetProperty(name, out var value) || !value.TryGetDouble(out var parsed) ||
+        if (!parent.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number ||
+            !value.TryGetDouble(out var parsed) ||
             double.IsNaN(parsed) || double.IsInfinity(parsed) || parsed < minimum || parsed > maximum)
         {
             throw new InvalidDataException($"The local bridge field '{name}' is invalid.");
         }
     }
 
-    private static void RequireNumberOrNull(JsonElement parent, string name)
+    private static void RequireNumberOrNull(JsonElement parent, string name, double minimum, double maximum)
     {
         if (!parent.TryGetProperty(name, out var value))
         {
@@ -480,7 +575,7 @@ public partial class MainWindow : Window
         }
         if (value.ValueKind != JsonValueKind.Null)
         {
-            RequireNumber(parent, name);
+            RequireNumber(parent, name, minimum, maximum);
         }
     }
 
@@ -500,7 +595,7 @@ public partial class MainWindow : Window
                 process.Kill(entireProcessTree: true);
             }
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
         }
     }
@@ -524,49 +619,147 @@ public partial class MainWindow : Window
 
     private static BridgePaths? ResolveBridge()
     {
-        var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        var sharedRoot = Path.GetFullPath(Path.Combine(projectRoot, "..", ".."));
-        var candidates = new[]
+        var installRoot = Path.GetFullPath(AppContext.BaseDirectory);
+        var installed = ResolveBridgePair(installRoot, installRoot);
+        if (installed is not null)
         {
-            new BridgePaths(Path.Combine(AppContext.BaseDirectory, "python.exe"), Path.Combine(AppContext.BaseDirectory, "guided_care_cli.py")),
-            new BridgePaths(Path.Combine(projectRoot, ".venv", "Scripts", "python.exe"), Path.Combine(projectRoot, "guided_care_cli.py")),
-            new BridgePaths(Path.Combine(sharedRoot, ".venv", "Scripts", "python.exe"), Path.Combine(projectRoot, "guided_care_cli.py")),
-        };
-        return candidates.FirstOrDefault(candidate => File.Exists(candidate.PythonPath) && File.Exists(candidate.ScriptPath));
+            return installed;
+        }
+
+        var projectRoot = TryGetDevelopmentRoot();
+        if (projectRoot is null)
+        {
+            return null;
+        }
+
+        var projectBridge = ResolveBridgePair(projectRoot, projectRoot);
+        if (projectBridge is not null)
+        {
+            return projectBridge;
+        }
+
+        var sharedRoot = TryGetWorktreeHostRoot(projectRoot);
+        return sharedRoot is null ? null : ResolveBridgePair(sharedRoot, projectRoot);
     }
 
     private static string? ResolveLegacyEnginePath()
     {
-        var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        var sharedRoot = Path.GetFullPath(Path.Combine(projectRoot, "..", ".."));
-        var candidates = new[]
+        var installRoot = Path.GetFullPath(AppContext.BaseDirectory);
+        var installed = CanonicalFileWithin(Path.Combine(installRoot, "WinCarePro.exe"), installRoot);
+        if (installed is not null)
+        {
+            return installed;
+        }
+
+        var projectRoot = TryGetDevelopmentRoot();
+        if (projectRoot is null)
+        {
+            return null;
+        }
+
+        var projectCandidates = new[]
         {
             Path.Combine(projectRoot, "dist", "WinCarePro.exe"),
             Path.Combine(projectRoot, "WinCarePro.exe"),
+        };
+        var projectExecutable = projectCandidates
+            .Select(path => CanonicalFileWithin(path, projectRoot))
+            .FirstOrDefault(path => path is not null);
+        if (projectExecutable is not null)
+        {
+            return projectExecutable;
+        }
+
+        var sharedRoot = TryGetWorktreeHostRoot(projectRoot);
+        if (sharedRoot is null)
+        {
+            return null;
+        }
+        return new[]
+        {
             Path.Combine(sharedRoot, "dist", "WinCarePro.exe"),
             Path.Combine(sharedRoot, "WinCarePro.exe"),
-            Path.Combine(AppContext.BaseDirectory, "WinCarePro.exe"),
-        };
-        return candidates.FirstOrDefault(File.Exists);
+        }.Select(path => CanonicalFileWithin(path, sharedRoot)).FirstOrDefault(path => path is not null);
     }
+
+    private static BridgePaths? ResolveBridgePair(string pythonRoot, string scriptRoot)
+    {
+        var python = CanonicalFileWithin(Path.Combine(pythonRoot, ".venv", "Scripts", "python.exe"), pythonRoot)
+            ?? CanonicalFileWithin(Path.Combine(pythonRoot, "python.exe"), pythonRoot);
+        var script = CanonicalFileWithin(Path.Combine(scriptRoot, "guided_care_cli.py"), scriptRoot);
+        return python is null || script is null ? null : new BridgePaths(python, script);
+    }
+
+    private static string? TryGetDevelopmentRoot()
+    {
+        var targetFramework = new DirectoryInfo(Path.GetFullPath(AppContext.BaseDirectory));
+        var configuration = targetFramework.Parent;
+        var bin = configuration?.Parent;
+        var project = bin?.Parent;
+        var root = project?.Parent;
+        return targetFramework.Name.Equals("net8.0-windows", StringComparison.OrdinalIgnoreCase) &&
+               configuration is not null &&
+               (configuration.Name.Equals("Debug", StringComparison.OrdinalIgnoreCase) ||
+                configuration.Name.Equals("Release", StringComparison.OrdinalIgnoreCase)) &&
+               bin?.Name.Equals("bin", StringComparison.OrdinalIgnoreCase) == true &&
+               project?.Name.Equals("WinCarePro.Desktop", StringComparison.OrdinalIgnoreCase) == true
+            ? root?.FullName
+            : null;
+    }
+
+    private static string? TryGetWorktreeHostRoot(string projectRoot)
+    {
+        var worktrees = Directory.GetParent(projectRoot);
+        return worktrees?.Name.Equals(".worktrees", StringComparison.OrdinalIgnoreCase) == true
+            ? worktrees.Parent?.FullName
+            : null;
+    }
+
+    private static string? CanonicalFileWithin(string candidate, string allowedRoot)
+    {
+        try
+        {
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(allowedRoot));
+            var fullPath = Path.GetFullPath(candidate);
+            if (!IsWithinRoot(fullPath, root))
+            {
+                return null;
+            }
+
+            var file = new FileInfo(fullPath);
+            if (!file.Exists)
+            {
+                return null;
+            }
+            var canonical = file.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? file.FullName;
+            return IsWithinRoot(canonical, root) ? canonical : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsWithinRoot(string path, string root) =>
+        path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
     private void LaunchLegacy(string surface, string successMessage)
     {
         var executable = ResolveLegacyEnginePath();
         if (executable is null)
         {
-            StatusText.Text = $"{surface} is unavailable because the full WinCare Pro engine was not found.";
+            SetStatus($"{surface} is unavailable because the full WinCare Pro engine was not found.");
             return;
         }
 
         try
         {
             Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true });
-            StatusText.Text = successMessage;
+            SetStatus(successMessage);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
-            StatusText.Text = $"{surface} could not open. No care action was started.";
+            SetStatus($"{surface} could not open. No care action was started.");
         }
     }
 

@@ -115,7 +115,7 @@
             <Border Style="{StaticResource CareCard}" Width="190">
               <StackPanel>
                 <TextBlock Text="RISKS TO REVIEW" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
-                <TextBlock x:Name="UrgentRiskCountText" Text="Not available" FontSize="25" FontWeight="SemiBold" Margin="0,7,0,0"
+                <TextBlock x:Name="UrgentRiskCountText" Text="Unknown" FontSize="25" FontWeight="SemiBold" Margin="0,7,0,0"
                            automation:AutomationProperties.Name="Risks to review"/>
               </StackPanel>
             </Border>
