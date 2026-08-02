@@ -28,6 +28,7 @@ venv/
 ENV/
 .idea/
 .vscode/
+.worktrees/
 
 # === Temp Reports & Artifacts ===
 *.html
