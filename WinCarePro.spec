@@ -66,6 +66,7 @@ exe = EXE(
     codesign_identity=os.environ.get("WINCAREPRO_CODESIGN_IDENTITY", None),
     entitlements_file=None,
     uac_admin=True,  # Request UAC Administrator Elevation on launch
+    icon='assets/WinCarePro.ico',
 )
 
 if not os.environ.get("WINCAREPRO_CODESIGN_IDENTITY") and not os.environ.get("CI"):
