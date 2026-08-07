@@ -11,10 +11,12 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from release_config import release_setting
+
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
-DEFAULT_MANIFEST_URL = os.environ.get("WINCAREPRO_UPDATE_MANIFEST_URL", "")
-EXPECTED_PUBLISHER = os.environ.get("WINCAREPRO_SIGNER_SUBJECT", "")
+DEFAULT_MANIFEST_URL = release_setting("WINCAREPRO_UPDATE_MANIFEST_URL")
+EXPECTED_PUBLISHER = release_setting("WINCAREPRO_SIGNER_SUBJECT")
 
 
 def version_tuple(value: str) -> tuple[int, ...]:
@@ -72,40 +74,52 @@ class UpdateClient:
             Path(tempfile.gettempdir()) / "WinCarePro-Update.exe")
         request = urllib.request.Request(
             url, headers={"User-Agent": "WinCarePro-Updater/1.0"})
-        digest = hashlib.sha256()
-        with (
-            urllib.request.urlopen(request, timeout=60) as response,  # nosec B310
-            destination_path.open("wb") as output,
-        ):
-            while chunk := response.read(1024 * 1024):
-                digest.update(chunk)
-                output.write(chunk)
-        if digest.hexdigest().lower() != str(manifest["sha256"]).lower():
+        try:
+            digest = hashlib.sha256()
+            with (
+                urllib.request.urlopen(request, timeout=60) as response,  # nosec B310
+                destination_path.open("wb") as output,
+            ):
+                while chunk := response.read(1024 * 1024):
+                    digest.update(chunk)
+                    output.write(chunk)
+            if digest.hexdigest().lower() != str(manifest["sha256"]).lower():
+                raise ValueError("Downloaded update failed SHA-256 verification.")
+            self._verify_authenticode(destination_path)
+            return destination_path
+        except Exception:
             destination_path.unlink(missing_ok=True)
-            raise ValueError("Downloaded update failed SHA-256 verification.")
-        self._verify_authenticode(destination_path)
-        return destination_path
+            raise
 
     def _verify_authenticode(self, path: Path) -> None:
         if os.name != "nt":
             raise OSError("Authenticode verification requires Windows.")
         script = (
-            "$s=Get-AuthenticodeSignature -LiteralPath $args[0];"
+            "$s=Get-AuthenticodeSignature -LiteralPath $env:WINCAREPRO_SIGNATURE_TARGET;"
             "[pscustomobject]@{Status=$s.Status.ToString();"
             "Subject=$s.SignerCertificate.Subject}|ConvertTo-Json -Compress"
         )
-        process = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-             script, str(path)],
-            capture_output=True, text=True, timeout=20,
-            creationflags=CREATE_NO_WINDOW)
-        result = json.loads(process.stdout or "{}")
-        if process.returncode or result.get("Status") != "Valid":
+        try:
+            process = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                 script],
+                capture_output=True, text=True, timeout=20,
+                creationflags=CREATE_NO_WINDOW,
+                env={**os.environ,
+                     "SystemRoot": os.environ.get("SystemRoot", r"C:\Windows"),
+                     "WINDIR": os.environ.get("WINDIR", r"C:\Windows"),
+                     "PSModulePath": r"C:\Program Files\WindowsPowerShell\Modules;C:\Windows\System32\WindowsPowerShell\v1.0\Modules",
+                     "WINCAREPRO_SIGNATURE_TARGET": str(path)})
+            result = json.loads(process.stdout or "{}")
+            if process.returncode or result.get("Status") != "Valid":
+                raise ValueError("Update does not have a valid Authenticode signature.")
+            if result.get("Subject", "").strip().casefold() != self.expected_publisher.casefold():
+                raise ValueError("Update signer does not match the trusted publisher.")
+        except Exception as exc:
             path.unlink(missing_ok=True)
-            raise ValueError("Update does not have a valid Authenticode signature.")
-        if self.expected_publisher.lower() not in result.get("Subject", "").lower():
-            path.unlink(missing_ok=True)
-            raise ValueError("Update signer does not match the trusted publisher.")
+            if isinstance(exc, ValueError):
+                raise
+            raise ValueError("Update signature verification failed.") from exc
 
 
 def install_and_relaunch(installer_path: Path) -> None:

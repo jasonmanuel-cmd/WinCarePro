@@ -1,7 +1,9 @@
 import hashlib
 import json
+import os
+import shutil
+import subprocess
 import tempfile
-import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -78,6 +80,59 @@ class UpdateTests(unittest.TestCase):
                 "WinCare Pro LLC").download_and_verify(
                     manifest, str(path))
             self.assertEqual(result.read_bytes(), payload)
+
+    @mock.patch("updater.urllib.request.urlopen")
+    def test_failed_download_removes_partial_executable(self, urlopen):
+        class BrokenResponse(_Response):
+            def read(self, size=-1):
+                if self.offset:
+                    raise OSError("connection lost")
+                return super().read(4)
+
+        urlopen.return_value = BrokenResponse(b"partial update")
+        manifest = {
+            "url": "https://updates.example.com/WinCarePro.exe",
+            "sha256": hashlib.sha256(b"partial update").hexdigest(),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "update.exe"
+            with self.assertRaises(OSError):
+                UpdateClient(
+                    "https://updates.example.com/manifest.json",
+                    "CN=WinCare Pro LLC").download_and_verify(manifest, str(path))
+            self.assertFalse(path.exists())
+
+    @mock.patch("updater.subprocess.run")
+    def test_signer_subject_must_match_exactly(self, run):
+        run.return_value = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({"Status": "Valid", "Subject": "CN=WinCare Pro LLC Malware"}),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "update.exe"
+            path.write_bytes(b"payload")
+            with self.assertRaisesRegex(ValueError, "trusted publisher"):
+                UpdateClient(
+                    "https://updates.example.com/manifest.json",
+                    "CN=WinCare Pro LLC")._verify_authenticode(path)
+            self.assertFalse(path.exists())
+
+    def test_real_signed_windows_binary_is_accepted(self):
+        path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "notepad.exe"
+        process = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             f"(Get-AuthenticodeSignature -LiteralPath '{path}').SignerCertificate.Subject"],
+            capture_output=True, text=True, check=True,
+            env={**os.environ, "SystemRoot": os.environ.get("SystemRoot", r"C:\Windows"),
+                 "WINDIR": os.environ.get("WINDIR", r"C:\Windows"),
+                 "PSModulePath": r"C:\Program Files\WindowsPowerShell\Modules;C:\Windows\System32\WindowsPowerShell\v1.0\Modules"},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            copy = Path(directory) / "signed.exe"
+            shutil.copy2(path, copy)
+            UpdateClient(
+                "https://updates.example.test/update.json", process.stdout.strip()
+            )._verify_authenticode(copy)
 
     @mock.patch("updater.subprocess.Popen")
     def test_install_and_relaunch_runs_silently_and_exits(self, popen):

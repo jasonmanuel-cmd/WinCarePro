@@ -25,7 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio pyinstaller bandit safety
+          pip install pytest pytest-asyncio pyinstaller bandit pip-audit
 
       - name: Verify PyInstaller build
         run: python -m PyInstaller --clean --noconfirm WinCarePro.spec
@@ -45,10 +45,10 @@ jobs:
         shell: powershell
 
       - name: Run security scanner (bandit)
-        run: bandit -r . -f json -o bandit-report.json --exclude build,dist,.venv || true
+        run: bandit -r core *.py -ll -f json -o bandit-report.json
 
-      - name: Run dependency audit (safety)
-        run: safety check --full-report || true
+      - name: Run dependency audit
+        run: pip-audit -r requirements.txt
 
       - name: Run test suite
         run: pytest tests/ -v --tb=short --cov=. --cov-report=term-missing
@@ -91,7 +91,7 @@ jobs:
           pip install -r tests/e2e/requirements.txt
 
       - name: Build WPF desktop app
-        run: dotnet build WinCarePro.Desktop.csproj -c Release
+        run: dotnet build WinCarePro.Desktop\WinCarePro.Desktop.csproj -c Release
 
       - name: Run E2E tests
         run: |

@@ -1,7 +1,7 @@
 """pytest fixtures for WinCarePro Desktop E2E tests."""
 
+import os
 import subprocess
-import time
 
 import pywinauto
 import pytest
@@ -16,28 +16,29 @@ def app_path():
 
 
 @pytest.fixture(scope="session")
-def app_launch():
+def app_launch(tmp_path_factory):
     """Launch the WPF app and return the pywinauto Application instance.
 
     Teardown kills the app process after all session-scoped E2E tests finish.
     """
+    sandbox = tmp_path_factory.mktemp("wpf_profile")
+    env = os.environ.copy()
+    env["WINDIR"] = env.get("WINDIR") or env.get("SystemRoot", r"C:\Windows")
+    env["WINCAREPRO_CARE_ROOT"] = str(sandbox / "care")
     proc = subprocess.Popen(
-        [APP_PATH],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        [APP_PATH], env=env, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, creationflags=0x08000000,
     )
-    time.sleep(LAUNCH_TIMEOUT)  # Allow WPF app to initialize
     try:
-        app = pywinauto.Application(backend="uia").connect(timeout=10)
+        app = pywinauto.Application(backend="uia").connect(
+            process=proc.pid, timeout=LAUNCH_TIMEOUT)
+        app.window(title=APP_TITLE).wait("visible ready", timeout=LAUNCH_TIMEOUT)
     except Exception:
-        # App may already be running or failed to start; try top-level connect
-        app = pywinauto.Application(backend="uia").connect(title=APP_TITLE)
+        proc.kill()
+        raise
     yield app, proc
     # Teardown: close app gracefully, then force kill
-    try:
-        app.kill()
-    except Exception:
-        pass
+    app.kill()
     try:
         proc.terminate()
         proc.wait(timeout=5)
@@ -53,7 +54,7 @@ def main_window(app_launch):
     the UI via AutomationIds and control names.
     """
     app, _ = app_launch
-    window = app.windows(title=APP_TITLE)[0]
+    window = app.window(title=APP_TITLE)
     window.wait("visible", timeout=LAUNCH_TIMEOUT)
     yield window
 

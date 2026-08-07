@@ -68,6 +68,16 @@ class TestSecurityScanner(unittest.TestCase):
                 self.assertEqual(findings[0]["category"], "Unsigned Writable Execution")
                 self.assertEqual(findings[0]["type"], "Warning")
 
+    def test_warnings_do_not_zero_security_score(self):
+        scanner = SecurityScanner()
+        warnings = [{"type": "Warning"}, {"type": "Warning"}]
+        with mock.patch.object(scanner, "scan_processes", return_value=warnings), mock.patch.object(
+            scanner, "scan_startup_persistence", return_value=[]
+        ):
+            result = scanner.run_security_suite()
+
+        self.assertEqual(result["score"], 90)
+
 
 if __name__ == "__main__":
     unittest.main()

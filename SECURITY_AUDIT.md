@@ -1,6 +1,6 @@
 # Security Audit: WinCarePro v1.3.0
 
-Date: 2026-07-28
+Date: 2026-08-02
 
 ## Checks
 
@@ -21,12 +21,23 @@ Date: 2026-07-28
 - Retained file rescan validation, reparse-point rejection, double confirmation,
   and verified duplicate-copy preservation.
 - Online licensing continues to fail closed when Gumroad cannot verify a key.
+- License persistence now fails closed when the protected local signature cannot
+  be computed; it cannot create an unsigned in-memory Pro entitlement.
+- Interrupted or failed update downloads remove partial executables. Update
+  verification requires HTTPS, SHA-256, a valid Authenticode signature, and an
+  exact signer-subject match.
+- Release signing and verification subprocesses no longer open console windows.
+- Commercial packaging refuses a missing signing certificate, and CI no longer
+  masks Bandit or dependency-audit failures.
 
 ## Results
 
 - Runtime dependencies: no known vulnerabilities.
 - No embedded API keys or credentials were found.
-- Windows mutation E2E tests were not executed on the host.
+- 95 unit/regression tests and five WPF UI Automation tests pass on the host.
+- Bandit reports no medium/high findings and `pip-audit` reports no known
+  vulnerabilities in `requirements.txt`.
+- Destructive Windows mutation tests were not executed on the daily-use host.
 
 ## Remaining boundary
 

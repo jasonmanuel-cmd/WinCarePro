@@ -13,8 +13,8 @@ APP_PATH = str(ROOT / "WinCarePro.Desktop" / "bin" / "Release" / "net8.0-windows
 if not os.path.exists(APP_PATH):
     APP_PATH = str(ROOT / "WinCarePro.Desktop" / "bin" / "Debug" / "net8.0-windows" / "WinCarePro.Desktop.exe")
 
-# Window title from WPF XAML: Title="WinCare Pro"
-APP_TITLE = "WinCare Pro"
+# Window title from WPF XAML.
+APP_TITLE = "WinCare Pro Guided Care"
 
 # Timeouts in seconds
 LAUNCH_TIMEOUT = 30

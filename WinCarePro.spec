@@ -4,12 +4,16 @@ import os
 import warnings
 
 block_cipher = None
+release_config = 'build/release_config.json'
+datas = [('data/bloatware.json', 'data')]
+if os.path.isfile(release_config):
+    datas.append((release_config, '.'))
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('data/bloatware.json', 'data')],
+    datas=datas,
     hiddenimports=[
         'winreg',
         'ctypes',
@@ -28,6 +32,7 @@ a = Analysis(
         'performance_booster'
         ,'commerce'
         ,'updater'
+        ,'release_config'
     ],
     hookspath=[],
     hooksconfig={},

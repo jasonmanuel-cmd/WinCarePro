@@ -61,7 +61,7 @@ class SecurityScanner:
             return {"status": "NotSigned", "signer": "N/A", "valid": False}
 
         ps_script = (
-            "$s=Get-AuthenticodeSignature -LiteralPath $args[0];"
+            "$s=Get-AuthenticodeSignature -LiteralPath $env:WINCAREPRO_SIGNATURE_TARGET;"
             "[pscustomobject]@{"
             "Status=$s.Status.ToString();"
             "Subject=$s.SignerCertificate.Subject"
@@ -69,8 +69,13 @@ class SecurityScanner:
         )
         try:
             p = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script, file_path],
-                capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+                capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW,
+                env={**os.environ,
+                     "SystemRoot": os.environ.get("SystemRoot", r"C:\Windows"),
+                     "WINDIR": os.environ.get("WINDIR", r"C:\Windows"),
+                     "PSModulePath": r"C:\Program Files\WindowsPowerShell\Modules;C:\Windows\System32\WindowsPowerShell\v1.0\Modules",
+                     "WINCAREPRO_SIGNATURE_TARGET": file_path},
             )
             if p.returncode == 0 and p.stdout.strip():
                 data = json.loads(p.stdout)
@@ -96,6 +101,9 @@ class SecurityScanner:
         user_profile = os.environ.get("USERPROFILE", "C:\\Users").lower()
         temp_dir = os.environ.get("TEMP", "").lower()
         appdata_dir = os.environ.get("APPDATA", "").lower()
+        windows_apps_dir = os.path.join(
+            os.environ.get("ProgramFiles", r"C:\Program Files"), "WindowsApps"
+        ).lower()
 
         connections_by_pid = {}
         try:
@@ -182,7 +190,8 @@ class SecurityScanner:
                 if pid in connections_by_pid:
                     ext_conns = connections_by_pid[pid]
                     sig_info = self.verify_signature_offline(exe)
-                    if not sig_info["valid"] and not exe_lower.startswith(win_dir):
+                    if (not sig_info["valid"] and not exe_lower.startswith(win_dir)
+                            and not exe_lower.startswith(windows_apps_dir)):
                         findings.append({
                             "type": "Warning",
                             "category": "Suspicious External Beacon",
@@ -190,7 +199,7 @@ class SecurityScanner:
                             "name": name,
                             "path": exe,
                             "details": f"Unsigned non-system executable has active external network connection(s) to: {', '.join(ext_conns)}",
-                            "action": "Severe risk of data exfiltration or reverse shell beacon. Terminate connection immediately."
+                            "action": "Review the publisher, install path, and destination before deciding whether to stop it."
                         })
                         continue
 
@@ -264,7 +273,7 @@ class SecurityScanner:
         critical_count = sum(1 for f in total_findings if f.get("type") == "Critical")
         warning_count = sum(1 for f in total_findings if f.get("type") == "Warning")
 
-        score_deductions = (critical_count * 25) + (warning_count * 10)
+        score_deductions = (critical_count * 25) + (warning_count * 5)
         security_score = max(0, 100 - score_deductions)
 
         return {

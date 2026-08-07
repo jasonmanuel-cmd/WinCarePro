@@ -7,7 +7,7 @@
         Foreground="{DynamicResource TextBrush}"
         Loaded="Window_Loaded"
         Closed="Window_Closed"
-        automation:AutomationProperties.Name="WinCare Pro Guided Care dashboard">
+        automation:AutomationProperties.Name="WinCare Pro Guided Care">
   <Window.Resources>
     <Style x:Key="KeyboardFocusStyle">
       <Setter Property="Control.Template">

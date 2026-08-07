@@ -385,15 +385,18 @@ public partial class MainWindow : Window
             ?? throw new IOException("The fixed local Python bridge was not found. Restore the project environment and try again.");
         var startInfo = new ProcessStartInfo
         {
-            FileName = bridge.PythonPath,
-            WorkingDirectory = Path.GetDirectoryName(bridge.ScriptPath)!,
+            FileName = bridge.ExecutablePath,
+            WorkingDirectory = bridge.WorkingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden,
         };
-        startInfo.ArgumentList.Add(bridge.ScriptPath);
+        if (bridge.ScriptPath is not null)
+        {
+            startInfo.ArgumentList.Add(bridge.ScriptPath);
+        }
         startInfo.ArgumentList.Add(command);
         if (cancelledScan)
         {
@@ -625,10 +628,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string RequireString(JsonElement parent, string name)
+    private static string RequireString(JsonElement parent, string name, bool allowEmpty = false)
     {
         if (!parent.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(value.GetString()))
+            (!allowEmpty && string.IsNullOrWhiteSpace(value.GetString())))
         {
             throw new InvalidDataException($"The local bridge field '{name}' is invalid.");
         }
@@ -842,10 +845,17 @@ public partial class MainWindow : Window
 
     private static BridgePaths? ResolveBridgePair(string pythonRoot, string scriptRoot)
     {
+        var bundled = CanonicalFileWithin(Path.Combine(pythonRoot, "WinCarePro.GuidedCare.exe"), pythonRoot);
+        if (bundled is not null)
+        {
+            return new BridgePaths(bundled, null, pythonRoot);
+        }
         var python = CanonicalFileWithin(Path.Combine(pythonRoot, ".venv", "Scripts", "python.exe"), pythonRoot)
             ?? CanonicalFileWithin(Path.Combine(pythonRoot, "python.exe"), pythonRoot);
         var script = CanonicalFileWithin(Path.Combine(scriptRoot, "guided_care_cli.py"), scriptRoot);
-        return python is null || script is null ? null : new BridgePaths(python, script);
+        return python is null || script is null
+            ? null
+            : new BridgePaths(python, script, Path.GetDirectoryName(script)!);
     }
 
     private static string? TryGetDevelopmentRoot()
@@ -940,7 +950,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private sealed record BridgePaths(string PythonPath, string ScriptPath);
+    private sealed record BridgePaths(string ExecutablePath, string? ScriptPath, string WorkingDirectory);
     private sealed record CareProfileOption(string Id, string Title, string Recommendation);
 
     private enum CancellationRecordResult

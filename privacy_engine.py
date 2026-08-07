@@ -139,7 +139,7 @@ class PrivacyShield:
         success1 = self._write_dword(winreg.HKEY_CURRENT_USER, "HKCU", r"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions", val)
         bing_val = 1 if enable else 0
         success2 = self._write_dword(winreg.HKEY_CURRENT_USER, "HKCU", r"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled", bing_val)
-        return success1 or success2
+        return success1 and success2
 
     def get_copilot_recall(self) -> bool:
         """
@@ -161,7 +161,7 @@ class PrivacyShield:
         disable_ai_val = 0 if enable else 1
         s1 = self._write_dword(winreg.HKEY_CURRENT_USER, "HKCU", r"Software\Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot", turn_off_val)
         s2 = self._write_dword(winreg.HKEY_CURRENT_USER, "HKCU", r"Software\Policies\Microsoft\Windows\WindowsCopilot", "DisableAIDataAnalysis", disable_ai_val)
-        return s1 or s2
+        return s1 and s2
 
     def get_advertising_id(self) -> bool:
         """

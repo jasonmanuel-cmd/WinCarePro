@@ -192,10 +192,10 @@ class TestSecurityScannerSignatureInjectionFix:
                         if (isinstance(cmd, list) and len(cmd) >= 5 and cmd[0] == "powershell"
                                 and cmd[3] == "-Command" and "Get-AuthenticodeSignature" in cmd[4]):
                             script = cmd[4]
-                            path_arg = cmd[5]
+                            env = run_mock.call_args.kwargs["env"]
 
-                            assert "$args[0]" in script, f"Script must use $args[0]: {script}"
-                            assert path_arg == path
+                            assert "$env:WINCAREPRO_SIGNATURE_TARGET" in script
+                            assert env["WINCAREPRO_SIGNATURE_TARGET"] == path
                             assert path not in script
                             return
                     pytest.fail("Get-AuthenticodeSignature call not found")

@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+
 
 def find_signtool() -> str:
     found = shutil.which("signtool")
@@ -26,9 +28,12 @@ def sign(path: Path, thumbprint: str, timestamp_url: str) -> None:
             find_signtool(), "sign", "/sha1", thumbprint, "/fd", "SHA256",
             "/tr", timestamp_url, "/td", "SHA256", str(path),
         ],
-        check=True,
+        check=True, creationflags=CREATE_NO_WINDOW,
     )
-    subprocess.run([find_signtool(), "verify", "/pa", "/v", str(path)], check=True)
+    subprocess.run(
+        [find_signtool(), "verify", "/pa", "/v", str(path)],
+        check=True, creationflags=CREATE_NO_WINDOW,
+    )
 
 
 def manifest(path: Path, version: str, download_url: str, output: Path) -> None:
@@ -53,11 +58,10 @@ def main() -> None:
     args = parser.parse_args()
     if not args.exe.is_file():
         parser.error(f"EXE not found: {args.exe}")
-    if args.thumbprint:
-        sign(args.exe.resolve(), args.thumbprint, args.timestamp_url)
-        print(f"Signed {args.exe}")
-    else:
-        print(f"WARNING: no --thumbprint or WINCAREPRO_SIGN_CERT_THUMBPRINT set; {args.exe} is UNSIGNED.")
+    if not args.thumbprint:
+        parser.error("Set --thumbprint or WINCAREPRO_SIGN_CERT_THUMBPRINT; unsigned releases are refused")
+    sign(args.exe.resolve(), args.thumbprint, args.timestamp_url)
+    print(f"Signed {args.exe}")
     manifest(args.exe.resolve(), args.version, args.url, args.manifest.resolve())
     print(f"Wrote {args.manifest}")
 

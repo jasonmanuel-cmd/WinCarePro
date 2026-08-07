@@ -1,6 +1,7 @@
 import unittest
+from unittest import mock
 
-from privacy_engine import privacy_protection_switches
+from privacy_engine import PrivacyShield, privacy_protection_switches
 
 
 class PrivacyProtectionSwitchTests(unittest.TestCase):
@@ -29,6 +30,11 @@ class PrivacyProtectionSwitchTests(unittest.TestCase):
             {"bing": False, "copilot": False, "advertising_id": False,
              "telemetry": False, "location": False, "app_diagnostics": False},
         )
+
+    def test_multi_value_change_reports_partial_failure(self):
+        shield = PrivacyShield()
+        with mock.patch.object(shield, "_write_dword", side_effect=[True, False]):
+            self.assertFalse(shield.set_bing_start_search(False))
 
 
 if __name__ == "__main__":

@@ -271,21 +271,23 @@ class WindowsBaselineAnalyzer:
         if not file_path or not os.path.exists(file_path):
             return {"status": "File Not Found", "signer": "N/A", "valid": False}
 
-        # SECURITY: The file path is passed as a PowerShell positional argument
-        # ($args[0]) instead of being interpolated into the script string.
-        # Interpolating a path into the script is a command-injection vector
-        # (CWE-78): a file named  foo'; Remove-Item ...  would execute.
-        # -LiteralPath + $args[0] keeps the path opaque to the parser.
+        # SECURITY: Pass the path through an isolated child-process environment
+        # instead of interpolating an untrusted filename into PowerShell code.
         ps_script = (
-            "$s = Get-AuthenticodeSignature -LiteralPath $args[0]; "
-            "if ($s) { [pscustomobject]@{ Status = $s.Status.ToString(); "
-            "Subject = $s.SignerCertificate.Subject } } | ConvertTo-Json -Compress"
+            "$s = Get-AuthenticodeSignature -LiteralPath $env:WINCAREPRO_SIGNATURE_TARGET; "
+            "[pscustomobject]@{ Status = $s.Status.ToString(); "
+            "Subject = $s.SignerCertificate.Subject } | ConvertTo-Json -Compress"
         )
         try:
             p = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                 "-Command", ps_script, file_path],
-                capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW
+                 "-Command", ps_script],
+                capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW,
+                env={**os.environ,
+                     "SystemRoot": os.environ.get("SystemRoot", r"C:\Windows"),
+                     "WINDIR": os.environ.get("WINDIR", r"C:\Windows"),
+                     "PSModulePath": r"C:\Program Files\WindowsPowerShell\Modules;C:\Windows\System32\WindowsPowerShell\v1.0\Modules",
+                     "WINCAREPRO_SIGNATURE_TARGET": file_path},
             )
             if p.returncode == 0 and p.stdout.strip():
                 data = json.loads(p.stdout)
@@ -311,6 +313,20 @@ class WindowsBaselineAnalyzer:
                 callback_out(text)
             self._log("Preset Apply", text)
 
+        def configure_service(service: str, start_mode: str) -> bool:
+            configured = subprocess.run(
+                ["sc", "config", service, "start=", start_mode],
+                capture_output=True, text=True, creationflags=CREATE_NO_WINDOW,
+            )
+            if configured.returncode != 0:
+                out(f"   [-] {service} configuration failed: {(configured.stderr or configured.stdout).strip()}")
+                return False
+            subprocess.run(
+                ["sc", "stop", service], capture_output=True, text=True,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            return True
+
         out(f"=== Applying Optimization Preset: [{preset_name.upper()}] ===")
         actions_taken = 0
 
@@ -318,10 +334,9 @@ class WindowsBaselineAnalyzer:
             out(">> Disabling Print Spooler & Printer Services...")
             for svc in ["Spooler", "PrintNotify", "Fax"]:
                 try:
-                    subprocess.run(["sc", "config", svc, "start=", "disabled"], capture_output=True, creationflags=CREATE_NO_WINDOW)
-                    subprocess.run(["sc", "stop", svc], capture_output=True, creationflags=CREATE_NO_WINDOW)
-                    out(f"   [+] Disabled & Stopped Service: {svc}")
-                    actions_taken += 1
+                    if configure_service(svc, "disabled"):
+                        out(f"   [+] Disabled service: {svc}")
+                        actions_taken += 1
                 except Exception as e:
                     out(f"   [-] Error setting service {svc}: {e}")
 
@@ -329,10 +344,9 @@ class WindowsBaselineAnalyzer:
             out(">> Disabling Microsoft Telemetry & Tracking Services...")
             for svc in ["DiagTrack", "dmwappushservice"]:
                 try:
-                    subprocess.run(["sc", "config", svc, "start=", "disabled"], capture_output=True, creationflags=CREATE_NO_WINDOW)
-                    subprocess.run(["sc", "stop", svc], capture_output=True, creationflags=CREATE_NO_WINDOW)
-                    out(f"   [+] Disabled & Stopped Telemetry Service: {svc}")
-                    actions_taken += 1
+                    if configure_service(svc, "disabled"):
+                        out(f"   [+] Disabled telemetry service: {svc}")
+                        actions_taken += 1
                 except Exception as e:
                     out(f"   [-] Error setting service {svc}: {e}")
 
@@ -340,10 +354,9 @@ class WindowsBaselineAnalyzer:
             out(">> Disabling Non-Essential Xbox Services...")
             for svc in ["XblAuthManager", "XblGameSave", "XboxNetApiSvc"]:
                 try:
-                    subprocess.run(["sc", "config", svc, "start=", "demand"], capture_output=True, creationflags=CREATE_NO_WINDOW)
-                    subprocess.run(["sc", "stop", svc], capture_output=True, creationflags=CREATE_NO_WINDOW)
-                    out(f"   [+] Set Xbox service to Manual/Demand: {svc}")
-                    actions_taken += 1
+                    if configure_service(svc, "demand"):
+                        out(f"   [+] Set Xbox service to Manual/Demand: {svc}")
+                        actions_taken += 1
                 except Exception as e:
                     out(f"   [-] Error setting Xbox service {svc}: {e}")
 

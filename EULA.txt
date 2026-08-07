@@ -1,0 +1,36 @@
+WINCARE PRO END USER LICENSE AGREEMENT
+Version 1.3.0 - August 2, 2026
+
+By installing or using WinCare Pro, you agree to this agreement. If you do not
+agree, do not install or use the software.
+
+1. License. A valid purchase grants the purchaser a limited, non-exclusive,
+non-transferable license to use WinCare Pro on supported Windows computers.
+The software is licensed, not sold. Reverse engineering or redistribution is
+not permitted except where applicable law does not allow that restriction.
+
+2. System changes. WinCare Pro can run administrative Windows tools and change
+services, registry values, network settings, applications, and files. Review
+each preview and keep current backups. Permanent deletion cannot be undone.
+
+3. No guaranteed result. Diagnostics and recommendations are informational.
+Performance, privacy, repair, and compatibility results depend on the computer,
+Windows configuration, and third-party software.
+
+4. Updates and third parties. License verification, updates, winget, Windows
+components, and optional local AI may involve third-party software or services
+governed by their own terms.
+
+5. Warranty and liability. To the maximum extent permitted by applicable law,
+the software is provided as-is without warranties. The licensor is not liable
+for indirect, incidental, special, or consequential loss. Rights that cannot be
+excluded under applicable consumer law remain unaffected.
+
+6. Termination. This license ends if its terms are materially breached. On
+termination, stop using and uninstall the software.
+
+7. Support and privacy. The privacy notice installed with the product describes
+data handling. Use the support contact on the purchase receipt or checkout page.
+
+The commercial seller must have this agreement reviewed for its legal identity,
+governing law, refund terms, and jurisdiction before public sale.

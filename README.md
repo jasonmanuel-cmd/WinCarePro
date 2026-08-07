@@ -1,6 +1,7 @@
 # WinCare Pro v1.3.0
 
-Modern Windows 11 maintenance, repair & optimization suite with **AI Intelligence, Windows Native Baseline Analysis, Privacy Shield, UWP Bloatware Remover, and RAM/Network Performance Booster**.
+Review-first Windows 11 maintenance software with Guided Care, system diagnostics,
+privacy controls, cleanup tools, repair workflows, and local proof history.
 
 Python 3.11+ · CustomTkinter (dark UI, blue accents) · psutil · Local AI / Rule-Based Heuristic Engine.
 
@@ -21,30 +22,30 @@ installation or terminal session runs during application startup.
 
 ---
 
-## 🆕 New in v1.3.0: Ultimate Feature Suite
+## New in v1.3.0
 
-### 1. 🔒 Privacy Shield & Anti-Spying Engine (`privacy_engine.py`)
+### 1. Privacy controls (`privacy_engine.py`)
 * **Bing Search Removal:** Disable Bing web search results & recommendations in the Windows 11 Start Menu.
 * **Copilot & Windows Recall Disabler:** Registry toggle to disable Windows Copilot and Recall telemetry background agents.
 * **Telemetry & Tracking Minimization:** Minimize telemetry level to Security (0), disable Advertising ID tracking, Location Services, and App Diagnostics tailored experiences.
-* **1-Click Privacy Presets:** Maximum Privacy, Balanced Privacy, and Restore Defaults.
+* **Reviewable presets:** Maximum Privacy, Balanced Privacy, and Restore Defaults.
 
 ### 2. 🗑 UWP App Bloatware Uninstaller & Leftover Cleaner (`bloat_remover.py`)
-* **PowerShell UWP Uninstaller:** 1-Click removal of pre-installed Microsoft apps (Xbox apps, Solitaire, News, Weather, Phone Link, Get Help, Cortana, Skype, etc.).
+* **PowerShell UWP Uninstaller:** Approved removal of selected pre-installed Microsoft apps.
 * **Leftover Folder & Registry Scanner:** Scans `%APPDATA%`, `%LOCALAPPDATA%`, `%PROGRAMDATA%`, and startup registry keys for orphaned leftovers from uninstalled apps.
 
-### 3. ⚡ RAM Standby Flusher & Fast DNS Gaming Optimizer (`performance_booster.py`)
+### 3. RAM and network tools (`performance_booster.py`)
 * **RAM Standby Flusher:** Trims working sets across all running processes and reclaims standby memory cache without rebooting.
-* **Fast DNS Switcher:** Instantly benchmark and switch system DNS to Cloudflare (`1.1.1.1`), Google (`8.8.8.8`), Quad9 (`9.9.9.9`), or Default DHCP.
-* **Gaming TCP Latency Tweak:** Toggles Nagle's Algorithm (`TcpAckFrequency` = 1, `TCPNoDelay` = 1) across network interfaces to reduce packet latency in online games.
+* **DNS Switcher:** Benchmark and switch system DNS to Cloudflare (`1.1.1.1`), Google (`8.8.8.8`), Quad9 (`9.9.9.9`), or Default DHCP.
+* **TCP settings:** Reviews and, after approval, changes `TcpAckFrequency` and `TCPNoDelay`; results vary by network and application.
 
 ### 4. 🛡 Windows Native Baseline & Bloat Cleaner (`win_baseline.py`)
 * Differentiates essential Windows core files (`csrss.exe`, `lsass.exe`, `svchost.exe`) from background bloat, updater daemons, and optional printer/driver services (`spooler`, `Fax`).
-* 1-Click presets for Printer Disabler, Game Mode, Background Bloat Cleaner, and Telemetry Disabler.
+* Reviewable presets for printer services, Game Mode, optional background items, and telemetry settings.
 
-### 5. 🤖 AI Advisor & Software Keep-Up-To-Date Assistant (`ai_engine.py`)
+### 5. Local advisor and software update assistant (`ai_engine.py`)
 * Generates plain-English AI reports, explains process origins, and integrates with `winget` for 1-click app upgrades.
-* Connects to local Ollama (`gemma3:1b`) or falls back to offline WinCare Heuristic AI.
+* Can connect to a user-run local Ollama service (`gemma3:1b`) or use deterministic offline rules.
 
 ---
 

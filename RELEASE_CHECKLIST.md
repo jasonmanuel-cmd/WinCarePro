@@ -16,15 +16,15 @@ prior release found a way to break without it.
    require `passed: true`, intent persistence before mutation, mutation read-back,
    verified rollback, and an empty completed ledger. This touches only a unique
    disposable value under `HKCU\Software\WinCarePro\Verification`.
-6. Set `$env:WINCAREPRO_SIGN_CERT_THUMBPRINT` if a code-signing certificate is
-   configured. If not, confirm shipping unsigned is intentional for this release.
+6. Set `$env:WINCAREPRO_SIGN_CERT_THUMBPRINT` to the commercial code-signing
+   certificate. Packaging fails closed when it is missing.
 7. Set `$env:WINCAREPRO_DOWNLOAD_URL` to the HTTPS URL the installer will be
    hosted at once uploaded.
-8. `./package.ps1` — signs the engine exe (if configured), compiles
-   `dist\WinCarePro-Setup-<version>.exe` via Inno Setup, signs the installer,
-   writes `dist\update.json`.
-9. If signed: `signtool verify /pa /v dist\WinCarePro.exe` and the installer —
-   confirm `Valid` and the expected publisher subject.
+8. `./package.ps1` — builds the bundled Guided Care bridge, publishes the
+   self-contained accessible WPF shell, signs every executable, compiles and
+   signs `dist\WinCarePro-Setup-<version>.exe`, and writes `dist\update.json`.
+9. Run `signtool verify /pa /v` against the desktop shell, bundled bridge,
+   legacy engine, and installer; confirm `Valid` and the expected publisher.
 10. `release\RunCleanVm.ps1` (or `release\CleanVmSmoke.ps1` directly in a clean
    Windows 11 VM) — confirms a machine with none of this dev environment's
    state can launch the signed exe and see the main window.

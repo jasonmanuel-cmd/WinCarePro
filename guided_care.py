@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import os
 from pathlib import Path
 import tempfile
 from types import MappingProxyType
@@ -122,7 +123,8 @@ class CareStore:
     """Bounded local snapshots and timeline, with corrupt state treated as empty."""
 
     def __init__(self, root: str | Path | None = None) -> None:
-        self.root = Path(root) if root is not None else get_appdata_local() / "WinCarePro" / "care"
+        configured_root = os.environ.get("WINCAREPRO_CARE_ROOT")
+        self.root = Path(root or configured_root) if root or configured_root else get_appdata_local() / "WinCarePro" / "care"
         self.snapshot_path = self.root / "snapshots.json"
         self.timeline_path = self.root / "timeline.jsonl"
 

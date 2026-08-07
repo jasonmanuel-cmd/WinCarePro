@@ -11,7 +11,8 @@
 
 import os
 import json
-import hashlib
+import base64
+import ctypes
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -19,21 +20,31 @@ from pathlib import Path
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "WinCarePro"
 LICENSE_FILE = APP_DIR / "license.dat"
 
-# ---------------------------------------------------------------------------
-# SECURITY: Local license signing secret.
-# The signing secret is supplied by the operator at build/install time via the
-# environment. It is NEVER hardcoded in source code (a hardcoded MAC key is
-# forgeable by anyone with the binary or repo access).
-# If the secret is absent or too short, license verification FAILS CLOSED:
-# stored licenses are not trusted and the app stays on the Free tier.
-# ---------------------------------------------------------------------------
-LICENSE_SIGNING_SECRET = os.environ.get("WINCAREPRO_LICENSE_SECRET", "")
-MIN_LICENSE_SECRET_LEN = 32
+class _DataBlob(ctypes.Structure):
+    _fields_ = [("cbData", ctypes.c_ulong), ("pbData", ctypes.POINTER(ctypes.c_ubyte))]
 
 
-def _signing_configured() -> bool:
-    """True only when a sufficiently strong signing secret is configured."""
-    return len(LICENSE_SIGNING_SECRET) >= MIN_LICENSE_SECRET_LEN
+def _blob(data: bytes) -> tuple[_DataBlob, object]:
+    buffer = ctypes.create_string_buffer(data)
+    return _DataBlob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte))), buffer
+
+
+def _dpapi(data: bytes, protect: bool) -> bytes:
+    if os.name != "nt":
+        raise OSError("Windows Data Protection is unavailable.")
+    input_blob, buffer = _blob(data)
+    output_blob = _DataBlob()
+    function = ctypes.windll.crypt32.CryptProtectData if protect else ctypes.windll.crypt32.CryptUnprotectData
+    args = (
+        ctypes.byref(input_blob), None, None, None, None, 1,
+        ctypes.byref(output_blob),
+    )
+    if not function(*args):
+        raise ctypes.WinError()
+    try:
+        return ctypes.string_at(output_blob.pbData, output_blob.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(output_blob.pbData)
 
 
 class LicenseManager:
@@ -48,75 +59,33 @@ class LicenseManager:
             self.GUMROAD_PRODUCT_PERMALINK = product_permalink
         self.license_info = self._load_license()
 
-    def _get_machine_guid(self) -> str:
-        """
-        Fetch unique hardware MachineGuid to bind the local license signature.
-
-        SECURITY: Fails CLOSED. On any read failure we return an empty string
-        instead of a shared fallback GUID. A shared fallback GUID would let the
-        same license signature validate on every machine that failed the read,
-        enabling cross-machine license sharing (see security/17-security-pattern.md §11.1).
-        """
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as k:
-                val, _ = winreg.QueryValueEx(k, "MachineGuid")
-                guid = str(val).strip()
-                if not guid:
-                    raise ValueError("MachineGuid is empty")
-                return guid
-        except Exception:
-            return ""
-
-    def _compute_signature(self, key: str, email: str) -> str:
-        """
-        Compute SHA256 signature tied to hardware GUID and the signing secret.
-
-        SECURITY: The secret comes from the WINCAREPRO_LICENSE_SECRET environment
-        variable, never from source. If no secret is configured, or no unique
-        hardware GUID is available, signing is refused (returns "") so that
-        license verification fails closed (§11.1).
-        """
-        if not _signing_configured():
-            return ""
-        hw_id = self._get_machine_guid()
-        if not hw_id:
-            return ""
-        raw = f"{key.strip().upper()}:{email.strip().lower()}:{hw_id}:{LICENSE_SIGNING_SECRET}"
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
     def _load_license(self) -> dict:
-        """Load stored license from local storage and verify cryptographic signature."""
+        """Load a license protected for the current Windows user through DPAPI."""
         if not LICENSE_FILE.exists():
             return {"tier": "Free", "key": "", "activated": False, "email": ""}
         try:
-            with open(LICENSE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                key = data.get("key", "")
-                email = data.get("email", "")
-                sig = data.get("signature", "")
-                # Fail closed: a non-empty signature that matches a computed
-                # signature produced with the configured secret + hardware GUID.
-                if data.get("activated") and sig and sig == self._compute_signature(key, email):
-                    return data
+            encrypted = base64.b64decode(LICENSE_FILE.read_bytes(), validate=True)
+            data = json.loads(_dpapi(encrypted, protect=False).decode("utf-8"))
+            if data.get("activated") and data.get("key"):
+                return data
         except Exception:
             pass
         return {"tier": "Free", "key": "", "activated": False, "email": ""}
 
     def _save_license(self, key: str, email: str, tier: str = "Pro") -> bool:
-        """Save activated license data with cryptographic signature to disk."""
+        """Atomically save an online-verified license protected by Windows DPAPI."""
         try:
             APP_DIR.mkdir(parents=True, exist_ok=True)
-            sig = self._compute_signature(key, email)
             data = {
                 "tier": tier,
                 "key": key.strip().upper(),
                 "email": email.strip().lower(),
                 "activated": True,
-                "signature": sig
             }
-            with open(LICENSE_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            encrypted = _dpapi(json.dumps(data).encode("utf-8"), protect=True)
+            temporary = LICENSE_FILE.with_suffix(".tmp")
+            temporary.write_bytes(base64.b64encode(encrypted))
+            temporary.replace(LICENSE_FILE)
             self.license_info = data
             return True
         except Exception:
@@ -169,7 +138,7 @@ class LicenseManager:
                         # persist it securely (e.g. signing secret not configured).
                         return False, (
                             "License was verified, but activation could not be saved "
-                            "securely on this machine (signing secret not configured)."
+                            "securely through Windows Data Protection."
                         )
         except Exception:
             pass  # Offline or Gumroad API unreachable

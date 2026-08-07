@@ -44,6 +44,11 @@ def test_store_starts_empty_and_recovers_from_corrupt_json(tmp_path):
     assert store.timeline() == []
 
 
+def test_store_uses_explicit_environment_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("WINCAREPRO_CARE_ROOT", str(tmp_path))
+    assert CareStore().root == tmp_path
+
+
 def test_store_keeps_the_latest_thirty_snapshots(tmp_path):
     store = CareStore(tmp_path)
 

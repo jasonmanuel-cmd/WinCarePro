@@ -4,8 +4,10 @@ import os
 import urllib.parse
 import webbrowser
 
+from release_config import release_setting
 
-CHECKOUT_URL = os.environ.get("WINCAREPRO_CHECKOUT_URL", "")
+
+CHECKOUT_URL = release_setting("WINCAREPRO_CHECKOUT_URL")
 
 
 def validated_checkout_url(url: str = CHECKOUT_URL) -> str:

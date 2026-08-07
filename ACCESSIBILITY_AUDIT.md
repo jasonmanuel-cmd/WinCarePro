@@ -1,38 +1,35 @@
 # Accessibility Audit: WinCarePro v1.3.0
 
 Standard: WCAG 2.1 AA guidance for a Windows desktop application  
-Date: 2026-07-28
+Date: 2026-08-02
 
 ## Summary
 
-Status: **BLOCKED**  
-Critical: 1 | Major: 2 | Minor: 1
+Status: **WPF ENTRY FLOW VERIFIED; COMMERCIAL CERTIFICATION BLOCKED**
+Open critical: 0 | Open major: 1 | Open minor: 0
 
-The packaged application opens and responds, but CustomTkinter renders its
-interactive controls on canvases that are not exposed meaningfully through
-Windows UI Automation.
+The installer now starts a self-contained WPF shell whose Guided Care controls
+are exposed through Windows UI Automation. The shell has accessible names,
+keyboard focus styling and shortcuts, polite live status, cancellation, and
+high-contrast behavior. Safety Center and Undo Center still hand off to the
+legacy CustomTkinter interface, so whole-product certification is not granted.
 
 ## Findings
 
 | Severity | Criterion | Evidence | Required fix |
 |---|---|---|---|
-| Critical | 4.1.2 Name, Role, Value | UIA found 191 descendants but only the title-bar controls had names; application buttons, switches, navigation, and dialogs had no accessible names or roles. | Move interactive controls to a Windows-accessible UI toolkit/provider, or implement a complete UI Automation provider. |
-| Major | 2.1.1 Keyboard | Only 10 Treeviews declared keyboard focus participation among 952 Tk widgets. Canvas-drawn buttons and switches were absent from traversal. | Make every action reachable by Tab/Shift+Tab and Enter/Space with visible focus. |
-| Major | 2.4.7 Focus Visible | Canvas controls do not expose a consistent keyboard-focus indicator. | Add a high-contrast focus state after keyboard participation is implemented. |
-| Minor | 1.4.3 Contrast | `gray45` helper text and several bright action-button backgrounds were below 4.5:1 with their text colors. | Updated helper text and darkened blue, green, red, and amber action palettes. |
+| Major | 2.1.1, 4.1.2 | Safety Center and Undo Center open the legacy canvas-based interface, whose action controls are not reliably exposed to UIA. | Move those mutation and rollback screens to native WPF controls before whole-product certification. |
 
 ## Verified
 
-- Packaged window is visible, enabled, and responsive at 1920×1080.
-- UIA inspection ran against fresh isolated `LOCALAPPDATA`, `APPDATA`, and
-  temporary folders.
-- Application startup, source GUI construction, and read-only diagnostics pass.
-- A 200% CustomTkinter scaling construction completed at a requested
-  1676×992 within the tested 1920×1080 display.
-- Final isolated visual evidence: `artifacts/final_isolated_gui.bmp`.
+- Five UI Automation end-to-end tests pass against the WPF shell.
+- The self-contained published shell launched with the bundled bridge; Refresh
+  and Support Preview completed through UIA and returned a 303-character preview.
+- Three static accessibility contracts pass and the Release C# build reports
+  zero warnings and zero errors.
 
 ## Release decision
 
-Accessibility certification is not granted. A native accessible control layer
-is the next release-blocking UI project; adding more canvas bindings would not
-solve screen-reader semantics.
+Whole-product accessibility certification is not granted until the two legacy
+handoffs are migrated and the signed installer passes Narrator, keyboard-only,
+200% scaling, and High Contrast checks in the clean Windows 11 VM.
