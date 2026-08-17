@@ -1,0 +1,6 @@
+{
+  "WINCAREPRO_CHECKOUT_URL": "https://coaijason1989.gumroad.com/l/wincarepro",
+  "WINCAREPRO_DOWNLOAD_URL": "https://files.gumroad.com/attachments/8988266451863/47ba7a3068dc43bce1beaa558c050de1/original/WinCarePro-Setup-1.3.0.exe",
+  "WINCAREPRO_UPDATE_MANIFEST_URL": "https://raw.githubusercontent.com/jasonmanuel-cmd/WinCarePro/main/releases/update.json",
+  "WINCAREPRO_SIGNER_SUBJECT": ""
+}
