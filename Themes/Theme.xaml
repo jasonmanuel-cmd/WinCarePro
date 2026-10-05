@@ -1,0 +1,224 @@
+<!--
+    Shared palette, typography and control styles.
+
+    This replaces ~40 inline copies of
+        new TextBlock { FontSize = 13, Foreground = TextSecondary, FontFamily = SansFont }
+    which is what made MainWindow.xaml.cs unreadable and untestable.
+
+    Key brushes are exposed as DynamicResource so they can be overridden at
+    runtime (e.g. a future dark theme) without rebuilding the visual tree.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ── Palette ──────────────────────────────────────────────────── -->
+    <Color x:Key="PrimaryColor">#0D9488</Color>
+    <Color x:Key="PrimaryDarkColor">#0A7C72</Color>
+    <Color x:Key="PrimaryLightColor">#CCFBF0</Color>
+
+    <SolidColorBrush x:Key="BgBrush"        Color="#F1F5F9" />
+    <SolidColorBrush x:Key="Surface"        Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SurfaceHover"   Color="#F8FAFC" />
+    <SolidColorBrush x:Key="Primary"        Color="{DynamicResource PrimaryColor}" />
+    <SolidColorBrush x:Key="PrimaryDark"    Color="{DynamicResource PrimaryDarkColor}" />
+    <SolidColorBrush x:Key="PrimaryLight"   Color="{DynamicResource PrimaryLightColor}" />
+    <SolidColorBrush x:Key="TextPrimary"    Color="#1E293B" />
+    <SolidColorBrush x:Key="TextSecondary"  Color="#64748B" />
+    <SolidColorBrush x:Key="TextTertiary"   Color="#94A3AF" />
+    <SolidColorBrush x:Key="Hairline"       Color="#E2E8F0" />
+    <SolidColorBrush x:Key="Success"        Color="#10B981" />
+    <SolidColorBrush x:Key="Warning"        Color="#F59E0B" />
+    <SolidColorBrush x:Key="Error"          Color="#EF4444" />
+
+    <FontFamily x:Key="SansFont">Segoe UI, Helvetica Neue, Arial, sans-serif</FontFamily>
+    <!-- Tabular figures so numbers do not jitter as they update. -->
+    <FontFamily x:Key="MonoFont">Consolas, Cascadia Mono, Courier New</FontFamily>
+    <!-- Segoe UI has no colour glyphs for emoji code points, so icon TextBlocks
+         must ask for the emoji font explicitly or they render blank. -->
+    <FontFamily x:Key="EmojiFont">Segoe UI Emoji</FontFamily>
+
+    <!-- ── Text ─────────────────────────────────────────────────────── -->
+    <Style x:Key="BodyText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource SansFont}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    </Style>
+
+    <Style x:Key="SecondaryText" TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiary}" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style x:Key="SectionHeader" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource SansFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+
+    <!-- Telemetry metric readout. Applied to the value TextBlock in MakeTelCard. -->
+    <Style x:Key="MetricValue" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource Primary}" />
+    </Style>
+
+    <!-- Secondary caption under a telemetry metric. -->
+    <Style x:Key="MetricCaption" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource SansFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ── Surfaces ─────────────────────────────────────────────────── -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="14" ShadowDepth="0" Opacity="0.06" Color="Black" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ClickableRow" TargetType="Border" BasedOn="{StaticResource Card}">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="14,10,14,10" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Effect" Value="{x:Null}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ── Buttons ──────────────────────────────────────────────────── -->
+    <!-- The default WPF button template draws a chunky OS chrome border that
+         fought the flat card design; these suppress it. -->
+    <Style TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontFamily" Value="{DynamicResource SansFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="10,6,10,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource SurfaceHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{DynamicResource Primary}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="20,12,20,12" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="{DynamicResource PrimaryColor}" BlurRadius="18" ShadowDepth="0" Opacity="0.12" />
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource PrimaryDark}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="OutlineButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Padding" Value="12,6,12,6" />
+    </Style>
+
+    <!-- ── Item containers ──────────────────────────────────────────── -->
+    <Style x:Key="FlatListItem" TargetType="ListBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="2,3,2,3" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <!--
+        Telemetry card. Uses Style.Triggers rather than MouseEnter/Leave
+        handlers so the hover state is declarative and cannot leak handlers
+        when a card is rebuilt.
+    -->
+    <Style x:Key="TelemetryCard" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="16,14,16,14" />
+        <Setter Property="MinWidth" Value="150" />
+        <Setter Property="Margin" Value="0,0,12,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.05" Color="Black" />
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="ModuleCard" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="16,14,16,14" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.05" Color="Black" />
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+</ResourceDictionary>

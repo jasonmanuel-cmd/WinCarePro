@@ -1,0 +1,30 @@
+## Build output
+bin/
+obj/
+publish/
+
+## Test artefacts
+TestResults/
+*.trx
+*.dmp
+*.hangdump
+
+## Screenshots produced by Tools/RenderShots
+screenshots/
+*.png
+
+## Editor / OS noise
+.vs/
+.idea/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+
+## Secrets — none are expected in this repo, but keep it that way
+*.pfx
+*.p12
+*.key
+.env
+.env.local
+appsettings.Development.json

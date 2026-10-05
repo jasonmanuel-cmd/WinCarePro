@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>WinCare Pro</AssemblyName>
+    <Product>WinCare Pro</Product>
+    <Version>1.0.0</Version>
+    <Description>System health optimizer for Windows</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Sibling projects live in subfolders, so the default glob would pull
+         their .cs files into the WPF app and break the build. -->
+    <Compile Remove="WinCareDesktop.Tests\**\*.cs" />
+    <Compile Remove="Tools\**\*.cs" />
+    <None Remove="WinCareDesktop.Tests\**\*" />
+    <None Remove="Tools\**\*" />
+  </ItemGroup>
+
+</Project>

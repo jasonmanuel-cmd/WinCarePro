@@ -1,0 +1,76 @@
+﻿<Window x:Class="WinCareDesktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WinCare Pro"
+        Height="720" Width="1100"
+        MinHeight="600" MinWidth="900"
+        Background="{DynamicResource BgBrush}"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{DynamicResource SansFont}"
+        TextOptions.TextFormattingMode="Ideal"
+        Foreground="{DynamicResource TextPrimary}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!--
+        Layout is a two-column shell: main content on the left, a fixed-width
+        sidebar on the right. The five regions are built in code because they
+        are populated from live VM state, but every element, style and template
+        is declared here so the visual tree is inspectable and testable.
+    -->
+    <Grid x:Name="RootGrid" Background="{DynamicResource BgBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="300" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ══ Header bar ══════════════════════════════════════════ -->
+        <Border x:Name="HeaderBar" Grid.Row="0" Grid.ColumnSpan="2"
+                Style="{StaticResource Card}"
+                CornerRadius="0" BorderThickness="0,0,0,1"
+                Padding="24,14,24,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel x:Name="BrandPanel" Orientation="Horizontal"
+                            VerticalAlignment="Center" />
+                <StackPanel x:Name="HeaderRightPanel" Grid.Column="1"
+                            Orientation="Horizontal" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- ══ Main column ════════════════════════════════════════ -->
+        <Grid x:Name="MainColumn" Grid.Row="1" Grid.Column="0" Margin="24,20,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />   <!-- score hero -->
+                <RowDefinition Height="Auto" />   <!-- action row -->
+                <RowDefinition Height="*" />      <!-- telemetry + modules -->
+            </Grid.RowDefinitions>
+        </Grid>
+
+        <!-- ══ Sidebar ═══════════════════════════════════════════ -->
+        <Grid x:Name="Sidebar" Grid.Row="1" Grid.Column="1" Margin="0,0,24,24" MinWidth="260">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+        </Grid>
+
+        <!-- ══ Sub-screen overlay ══════════════════════════════════ -->
+        <Border x:Name="SubScreenOverlay" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                Background="#E8F1F5F9" Visibility="Collapsed" />
+    </Grid>
+</Window>
