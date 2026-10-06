@@ -101,7 +101,7 @@ Services/
   SingleInstance.cs           named-mutex single-instance guard
   WindowActivator.cs          foregrounds the existing window on second launch
 ViewModels/MainViewModel.cs  state, commands, scoring
-WinCareDesktop.Tests/        113 xunit tests
+WinCareDesktop.Tests/        116 xunit tests
 Tools/RenderShots/           offscreen PNG renderer (see Screenshots)
 Tools/MakeIcon/              regenerates Assets/WinCarePro.ico
 Assets/                      app icon (.ico + per-size PNGs)
@@ -127,7 +127,7 @@ theme, override the palette keys — no C# changes needed.
 ## Tests
 
 ```powershell
-dotnet test WinCareDesktop.Tests                    # all 113
+dotnet test WinCareDesktop.Tests                    # all 116
 dotnet test WinCareDesktop.Tests --filter Category=Ui   # UI only
 ```
 

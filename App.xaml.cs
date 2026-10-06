@@ -31,6 +31,21 @@ public partial class App : Application
 
         ShutdownMode = ShutdownMode.OnMainWindowClose;
 
+        // Support telemetry-free environment snapshot. Written once per launch
+        // so a bug report can quote it without the user having to find the
+        // values themselves.
+        try
+        {
+            Directory.CreateDirectory(DataDir);
+            File.WriteAllText(
+                Path.Combine(DataDir, "environment.txt"),
+                Services.EnvironmentReport.Get());
+        }
+        catch
+        {
+            // Never let a support aid break startup.
+        }
+
         DispatcherUnhandledException += (_, args) =>
         {
             WriteCrash(args.Exception);
@@ -127,6 +142,7 @@ public partial class App : Application
                $"{ex.Message}\n\n" +
                $"The details were written to:\n" +
                $"{Path.Combine(DataDir, "crash.log")}\n\n" +
+               $"Also see environment.txt in the same folder for OS and tool info.\n\n" +
                $"Version {version}";
     }
 }

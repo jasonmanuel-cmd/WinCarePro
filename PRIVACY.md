@@ -16,6 +16,7 @@ the corresponding feature:
 |---|---|---|
 | `history.json` | A list of actions you performed, so Undo History survives a restart | Your undo history. Deletable at any time. |
 | `crash.log` | Exception text, if the app crashes | So a crash can be diagnosed if you choose to send it. Only written on a fault. |
+| `environment.txt` | OS version, DPI mode, which Windows tools are present | So a bug report can include it without asking you. Written on every launch. |
 
 Nothing else is written. No registry keys are created outside the Windows
 privacy settings you explicitly toggle yourself, and nothing is read from your
@@ -39,9 +40,14 @@ folders named in the app.
 
 ## What leaves your computer
 
-Nothing. There is no analytics, no crash reporting service, no update check, no
-telemetry, no advertising identifier, and no outbound connection of any kind.
-Removing the network code would not change what the app does.
+Nothing, by default. There is no analytics, no crash reporting service, no
+automatic update check, no telemetry, no advertising identifier, and no
+outbound connection of any kind.
+
+The **only** network call the app can make is a manual “Check for updates”
+action. It sends one HTTPS GET to a version manifest you would point it at, and
+it is never triggered on startup or in the background. Removing the network
+code would not change any other behaviour.
 
 If a crash happens, the details are written to `crash.log` on your machine. They
 are only shared if you personally choose to send them to whoever is supporting

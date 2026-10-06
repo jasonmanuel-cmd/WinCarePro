@@ -4,6 +4,30 @@ All notable changes to WinCare Pro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 semantic versioning.
 
+## [Unreleased]
+
+### Added
+
+- `Services/EnvironmentReport.cs` — writes `environment.txt` (OS, elevation,
+  DPI mode, tool presence) so support tickets don't need to ask for it one by
+  one.
+- `Services/UpdateChecker.cs` — opt-in, user-initiated version check. This is
+  the only network code path; it never runs automatically and is documented in
+  `PRIVACY.md`.
+- +3 `UpdateCheckerTests` → 116 total.
+
+### Changed
+
+- `App.xaml.cs` now writes `environment.txt` on every launch and the crash
+  message points at both files.
+
+### Security / honesty
+
+- The "no outbound connections" promise in `PRIVACY.md`/`EULA.md` now has one
+  explicit, user-triggered exception: the manual update check.
+- Code signing remains the one blocker that cannot be fixed in code — an EV/OV
+  certificate is still required before public distribution.
+
 ## [1.0.0] — 2026-10-05
 
 First public build. Productionized from the internal prototype.
