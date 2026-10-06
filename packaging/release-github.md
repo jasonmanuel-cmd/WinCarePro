@@ -24,17 +24,34 @@ This publishes the self-contained build, rebuilds the MSI, creates a zip of
 `publish\`, tags `v1.0.0`, and attaches `WinCare.msi` + the zip to the release
 as downloadable assets. The release body comes from `CHANGELOG.md`.
 
-## 3. Point the app's update check at the release
+## 3. Update check wiring (handled by the build)
 
-Copy the contents of `packaging\update-source.sample.txt` to a file named
-`update-source.txt` next to `WinCare Pro.exe` and adjust the URL to the real
-release manifest. The in-app updater fetches:
+Two files, and it is worth being precise about which is which:
 
-```json
-{ "version": "1.0.0", "url": "https://github.com/jasonmanuel-cmd/WinCarePro/releases/latest" }
-```
+1. **`update-source.txt` ships next to the exe.** One JSON line, no prose:
 
-No server to run — GitHub Releases is the CDN.
+   ```json
+   { "version": "1.0.0", "url": "https://raw.githubusercontent.com/jasonmanuel-cmd/WinCarePro/master/packaging/version.json" }
+   ```
+
+   `build-installer.ps1` generates this into `publish\` before the MSI harvest
+   and reads the version back out of `WinCare.wxs`, so the two cannot drift. Do
+   not hand-write it — the build wipes `publish\` on every run.
+
+2. **The `url` endpoint serves the version.** That is `packaging\version.json`
+   in this repo:
+
+   ```json
+   { "version": "1.0.0" }
+   ```
+
+   Bump that file when you ship a release.
+
+The app never fetches `update-source.txt` — it reads `url` out of it and fetches
+*that*. Pointing `url` at `github.com/…/releases/latest` will not work: it
+returns an HTML page, and the checker requires JSON with a `version` key.
+
+No server to run — raw.githubusercontent.com is the CDN.
 
 ## 4. winget manifest (community repo)
 

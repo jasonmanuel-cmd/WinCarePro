@@ -15,11 +15,17 @@
 
 .PARAMETER SkipTests
     Skips the test gate. Only for a local rebuild where tests have just run.
+
+.PARAMETER UpdateSourceUrl
+    Endpoint that the shipped update-source.txt points at. It must serve JSON
+    containing a "version" key. Defaults to the version manifest committed at
+    packaging/version.json, served straight from this repository.
 #>
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [string]$UpdateSourceUrl = 'https://raw.githubusercontent.com/jasonmanuel-cmd/WinCarePro/master/packaging/version.json'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -89,6 +95,48 @@ if (-not $exe) { throw 'Publish produced no executable.' }
 
 $sizeMb = [math]::Round($exe.Length / 1MB, 1)
 Write-Host ("    $($exe.Name)  ($sizeMb MB)") -ForegroundColor DarkGray
+
+# ── Generate update-source.txt ──────────────────────────────────────────
+# The app reads this from beside the exe when the user clicks "Check for
+# updates". It is written here, after publish and before the harvest, for two
+# reasons:
+#
+#   1. This script wipes publish/ at the start of every build. A hand-written
+#      file placed there does not survive to the next build, which is how a
+#      release once shipped an MSI whose update check could never find its
+#      source. Generating it as a build step makes that unrepeatable.
+#   2. The version is read back out of the .wxs rather than repeated as a
+#      literal here, so the JSON cannot drift out of step with the version in
+#      the MSI's Package table.
+#
+# Content is one JSON line and nothing else. The Diagnostics panel parses it and
+# reads "url" out of it; any prose in the file is a parse error.
+$wxsPath = Join-Path $installerDir 'WinCare.wxs'
+
+if ($wxsText = Get-Content $wxsPath -Raw) {
+    if ($wxsText -notmatch '<Package\b[^>]*\sVersion="([^"]+)"') {
+        throw "Could not read the package Version from $wxsPath"
+    }
+    $packageVersion = $Matches[1]
+}
+else {
+    throw "Missing $wxsPath"
+}
+
+$updateSourcePath = Join-Path $publishDir 'update-source.txt'
+$updateSourceJson = [ordered]@{
+    version = $packageVersion
+    url     = $UpdateSourceUrl
+} | ConvertTo-Json -Compress
+
+# UTF-8 without a BOM. A BOM puts an invisible character ahead of the opening
+# brace, which several JSON readers reject outright.
+[System.IO.File]::WriteAllText(
+    $updateSourcePath,
+    $updateSourceJson,
+    (New-Object System.Text.UTF8Encoding($false)))
+
+Write-Host "    update-source.txt -> $UpdateSourceUrl" -ForegroundColor DarkGray
 
 # WPF single-file publish is a misnomer: the managed assemblies are bundled
 # into the exe, but the native WPF components (wpfgfx_cor3.dll,

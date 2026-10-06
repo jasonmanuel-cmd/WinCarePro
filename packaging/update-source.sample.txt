@@ -1,8 +1,25 @@
-Place a file named `update-source.txt` next to WinCare Pro.exe with contents:
+REFERENCE ONLY — do not copy this into publish\.
 
-{ "version": "1.0.0", "url": "https://github.com/jasonmanuel-cmd/WinCarePro/releases/latest" }
+build-installer.ps1 generates publish\update-source.txt on every build, before
+the MSI harvest, and takes the version from installer\WinCare.wxs so the two
+cannot drift apart. The build wipes publish\ at the start of every run, which is
+why a hand-written file placed there does not survive to the next release.
 
-The app's Diagnostics panel update check reads this file and compares against
-the running version. Host it on any free HTTPS endpoint (GitHub Releases raw
-asset, Cloudflare Pages, gist) — it is the only network call the app ever makes
-and only when the user clicks "Check for updates".
+The generated file is one JSON line and nothing else:
+
+    { "version": "1.0.0", "url": "https://raw.githubusercontent.com/jasonmanuel-cmd/WinCarePro/master/packaging/version.json" }
+
+Two separate things, often confused:
+
+  * update-source.txt  — shipped next to the exe. The Diagnostics panel parses
+    it and reads "url" out of it.
+  * the "url" endpoint — serves the current version as JSON:
+    { "version": "1.0.0" }
+    That is packaging\version.json in this repo. Bump it when you ship.
+
+The app never fetches update-source.txt itself; it fetches the url inside it.
+Do not point "url" at a github.com/…/releases/latest URL: that returns an HTML
+page, and UpdateChecker requires JSON with a "version" key.
+
+This is the only network call the app ever makes, and only when the user
+clicks "Check for updates".

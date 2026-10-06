@@ -1236,22 +1236,57 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
             var manifestPath = System.IO.Path.Combine(
                 AppContext.BaseDirectory, "update-source.txt");
 
+            var expected = "{ \"version\": \"1.0.0\", \"url\": \"https://example.com/version.json\" }";
+
             if (!System.IO.File.Exists(manifestPath))
             {
                 MessageBox.Show(
                     "No update source is configured.\n\n" +
-                    "Create 'update-source.txt' next to the exe containing a URL to a JSON version manifest.\n" +
-                    "Example: { \"version\": \"1.1.0\" }",
+                    "Create 'update-source.txt' next to the exe.\n\n" +
+                    "Expected: " + expected,
                     "WinCare Pro", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            var url = System.IO.File.ReadAllText(manifestPath).Trim();
+            // The file holds a JSON object, not a bare URL, so the endpoint has to
+            // be lifted out of it before anything is fetched. ReadAllText-ing the
+            // whole file and handing it to HttpClient as the URL yields
+            // UriFormatException on every click, which surfaces as a confusing
+            // "Update check failed" rather than a missing-endpoint message.
+            string manifestUrl;
+            try
+            {
+                var text = System.IO.File.ReadAllText(manifestPath).Trim();
+                using var local = System.Text.Json.JsonDocument.Parse(text);
+                var candidate = local.RootElement.TryGetProperty("url", out var u)
+                    ? u.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    MessageBox.Show(
+                        "'update-source.txt' has no 'url'.\n\n" +
+                        "Expected: " + expected,
+                        "WinCare Pro", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                manifestUrl = candidate!;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                MessageBox.Show(
+                    "'update-source.txt' is not valid JSON.\n\n" +
+                    "Expected: " + expected,
+                    "WinCare Pro", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var checker = new Services.UpdateChecker();
             var current = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetName().Version?.ToString(3) ?? "0.0.0";
 
-            var r = await checker.CheckAsync(url, current);
+            var r = await checker.CheckAsync(manifestUrl, current);
             MessageBox.Show(
                 r.Error is null
                     ? (r.IsUpdateAvailable
