@@ -181,8 +181,14 @@ public class VisualTreeSmokeTests
 
             // Regression: the score used to be rendered twice (in the ring and
             // beside it) and both were hard-coded to "84" at construction.
+            //
+            // The size threshold is 24 rather than 30 because the ring shrank
+            // from 120px to 88px to give vertical space back to the card list,
+            // and the score readout was scaled down with it. Asserting on 30
+            // would now pass vacuously: no TextBlock is that large, so the
+            // filter returns nothing and NotEmpty fails for the wrong reason.
             var bigNumbers = Descendants<TextBlock>(window)
-                .Where(t => t.FontSize >= 30)
+                .Where(t => t.FontSize >= 24)
                 .Where(t => int.TryParse(t.Text, out _))
                 .ToList();
 
@@ -200,7 +206,7 @@ public class VisualTreeSmokeTests
             DrainDispatcher();
 
             var numeric = Descendants<TextBlock>(window)
-                .Where(t => t.FontSize >= 30 && int.TryParse(t.Text, out _))
+                .Where(t => t.FontSize >= 24 && int.TryParse(t.Text, out _))
                 .ToList();
 
             Assert.True(numeric.Count <= 2,
@@ -226,9 +232,25 @@ public class VisualTreeSmokeTests
 
             // Dash array must encode a real fraction of the circumference, not
             // the "solid circle" the original code produced.
+            //
+            // The bounds are derived from the ring's own geometry rather than
+            // hard-coded. The ring is 70px across with a 9px stroke, so its
+            // centreline radius is (70 - 9) / 2 = 30.5 and the circumference is
+            // about 191.6. Asserting a fixed "> 200" belonged to the old 100px
+            // ring and would have failed purely because the ring got smaller,
+            // which is not a defect.
             var circumference = ring!.StrokeDashArray![1];
             var filled = ring.StrokeDashArray[0];
-            Assert.True(circumference > 200, $"unexpected circumference {circumference}");
+
+            var centrelineRadius = (ring.Width - ring.StrokeThickness) / 2.0;
+            var expected = 2 * Math.PI * centrelineRadius;
+
+            Assert.True(Math.Abs(circumference - expected) < 0.5,
+                $"circumference {circumference} does not match the ring geometry " +
+                $"(expected about {expected:F1} for a {ring.Width}px ring with a " +
+                $"{ring.StrokeThickness}px stroke)");
+
+            // A dash longer than the circumference would wrap and render solid.
             Assert.InRange(filled, 0.0, circumference);
 
             window.Close();

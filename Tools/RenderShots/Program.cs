@@ -80,6 +80,8 @@ internal static class Program
         CaptureCard(window, outDir, "11-storage-tools", "Storage");
         CaptureCard(window, outDir, "12-power-tools", "Power");
 
+        ReportHoverCoverage(window);
+
         window.Close();
         app.Shutdown();
 
@@ -159,10 +161,18 @@ internal static class Program
             // their "Scanning..." placeholder and for the finished content, so
             // waiting on the heading returned early and the real content landed
             // several captures later. Also require the loading copy to be gone.
+            //
+            // "Looking for" matters for the same reason and more sharply. The
+            // uninstall panel loads Win32 apps first and Store apps in a second
+            // pass, and the second pass spawns PowerShell. Capturing while that
+            // line was still visible produced a screenshot showing 95 programs
+            // with no Store apps at all, which read as a bug in the feature
+            // rather than a race in the harness.
             var loading = PanelTexts(overlay).Any(t =>
                 t.Contains("Scanning", StringComparison.OrdinalIgnoreCase) ||
                 t.Contains("Reading", StringComparison.OrdinalIgnoreCase) ||
-                t.Contains("Collecting", StringComparison.OrdinalIgnoreCase));
+                t.Contains("Collecting", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Looking for", StringComparison.OrdinalIgnoreCase));
 
             if (!loading && OverlayTitle(overlay) == ExpectedTitle(name))
             {
@@ -229,8 +239,109 @@ internal static class Program
         return null;
     }
 
+    /// <summary>
+    /// Reports whether every clickable card carries a working hover style.
+    /// </summary>
+    /// <remarks>
+    /// This deliberately does NOT rasterise a hover frame, because that is not
+    /// possible here and claiming otherwise would be worse than the gap. Two
+    /// approaches were tried and both failed for real reasons:
+    ///
+    /// 1. Writing IsMouseOver directly. It is a read-only DependencyProperty the
+    ///    framework sets with an internal authorisation key. SetValue throws, and
+    ///    there is no backing CLR field or internal setter to reach.
+    /// 2. Moving the real OS cursor with SetCursorPos. The call returns true and
+    ///    the cursor does move, but this session delivers no mouse input to WPF at
+    ///    all - Mouse.DirectlyOver stays null - so IsMouseOver is never set.
+    ///
+    /// What this does check is the part that silently breaks: a card whose style
+    /// has no hover trigger, or whose trigger sets a property to the value it
+    /// already had. Both compile, both pass a structural test, and both leave the
+    /// user with no click affordance. Verifying that the trigger actually *fires*
+    /// still needs a real interactive session, which is stated plainly in the
+    /// README rather than papered over.
+    /// </remarks>
+    private static void ReportHoverCoverage(Window window)
+    {
+        var fe = (FrameworkElement)window;
+
+        var cards = All(fe).OfType<Border>()
+            .Where(b => b.Style != null && IsClickable(b))
+            .ToList();
+
+        var withHover = 0;
+        var noHover = new List<string>();
+
+        foreach (var card in cards)
+        {
+            var name = All(card).OfType<TextBlock>()
+                .Select(t => t.Text)
+                .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s) && s.Any(char.IsLetter));
+
+            if (HasHoverTrigger(card)) withHover++;
+            else noHover.Add(name ?? "(untitled)");
+        }
+
+        Console.WriteLine($"  hover: {withHover}/{cards.Count} clickable card(s) define a hover style");
+
+        foreach (var n in noHover)
+            Console.WriteLine($"    no hover style: {n}");
+
+        if (noHover.Count > 0)
+            Console.WriteLine("  hover: these cards give no click affordance until clicked");
+    }
+
+    /// <summary>A card counts as clickable if it reacts to a mouse button.</summary>
+    private static bool IsClickable(Border b)
+    {
+        // ModuleCard and TelemetryCard are the two card styles that open a
+        // panel, and both set Cursor=Hand, which is the honest signal.
+        return b.Cursor == System.Windows.Input.Cursors.Hand;
+    }
+
+    /// <summary>
+    /// True when the card's own style defines an IsMouseOver trigger that
+    /// changes at least one visual property.
+    /// </summary>
+    private static bool HasHoverTrigger(Border card)
+    {
+        // Background lives on Panel, BorderBrush on Control.
+        var visual = new[]
+        {
+            System.Windows.Controls.Panel.BackgroundProperty,
+            Control.BorderBrushProperty,
+            Border.BorderThicknessProperty,
+            UIElement.OpacityProperty,
+            FrameworkElement.RenderTransformProperty,
+        };
+
+        foreach (var trigger in card.Style!.Triggers)
+        {
+            if (trigger is not System.Windows.Trigger t) continue;
+            if (t.Property != UIElement.IsMouseOverProperty) continue;
+            if (t.Setters.Count == 0) continue;
+
+            // A trigger whose setters all target properties nobody can see is
+            // decoration, not feedback.
+            if (t.Setters.OfType<Setter>().Any(s => visual.Contains(s.Property))) return true;
+        }
+
+        return false;
+    }
+
     private static string Normalise(string? s) =>
         (s ?? "").Replace("&", "").Replace("-", "").Replace(" ", "").ToLowerInvariant();
+
+    /// <summary>Filesystem-safe slug: letters and digits only.</summary>
+    private static string Slug(string? s)
+    {
+        var cleaned = new string((s ?? "card")
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+        return cleaned.Length == 0 ? "card" : cleaned;
+    }
+
 
     private static IEnumerable<DependencyObject> All(DependencyObject root)
     {

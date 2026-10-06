@@ -27,7 +27,7 @@ to try it.
 | Diagnostics | CPU load, uptime, disk SMART health, top 5 memory users |
 | Privacy Shield | 4 registry-backed toggles for telemetry |
 | Removable Apps | Curated blocklist only — never guesses which apps you use |
-| Uninstall Programs | Every program with a registered uninstaller, searchable, sorted by size |
+| Uninstall Programs | Desktop apps *and* Microsoft Store apps, searchable, sorted by size |
 | RAM & Network | Standby memory flush, DNS switching |
 | History & Undo | Persisted to disk across restarts |
 
@@ -46,13 +46,20 @@ reversible, and those perform real work on revert.
 roots themselves are never touched — an earlier version deleted `%TEMP%`
 outright, which raced every installer and updater on the machine.
 
-**Uninstalling runs the vendor's own uninstaller.** The Uninstall Programs card
-reads the standard uninstall registry keys and launches whatever uninstall
-string the vendor registered, preferring a silent one when it exists. WinCare
+**Uninstalling always uses the program's own removal path.** Desktop apps come
+from the standard uninstall registry keys, and WinCare launches whatever
+uninstall string the vendor registered, preferring a silent one when it exists.
+Microsoft Store apps register no uninstall string at all — they are packaged
+apps enumerated with `Get-AppxPackage` and removed with `Remove-AppxPackage`, so
+the two kinds are handled separately and both appear in the same list. WinCare
 never deletes a program's install folder: doing that leaves registry keys,
 services, scheduled tasks and file associations behind, and breaks uninstall,
-repair and upgrade. Every uninstall shows you the exact command before it runs,
-and cannot be reverted — the record in history is honest about that.
+repair and upgrade. Every uninstall shows you exactly what will run before it
+runs, and cannot be reverted — the record in history is honest about that.
+
+Store apps also publish no install size, so their rows are labelled with their
+source instead of "size unknown", and they sort after everything with a known
+size rather than pretending to be zero bytes.
 
 **Recycle Bin, Update cache and DISM are destructive.** Each is behind a second
 confirmation that only appears after you press "Review…", so a stray click
@@ -86,12 +93,15 @@ Services/
   SystemOptimizerService.cs   all WMI, registry, process and DNS work
   HistoryStore.cs             atomic JSON persistence
   InstalledProgramsService.cs uninstall-registry enumeration, command building
+  AppxService.cs              Microsoft Store app enumeration and removal
   StorageCleanupService.cs    Recycle Bin, Update cache, DISM, largest folders
   PowerService.cs             stock power plans (enumeration and switching)
 ViewModels/MainViewModel.cs  state, commands, scoring
-WinCareDesktop.Tests/        89 xunit tests
+WinCareDesktop.Tests/        110 xunit tests
+Tools/RenderShots/           offscreen PNG renderer (see Screenshots)
 build-release.ps1            clean → build → test → publish
 install.ps1                  per-user install / uninstall
+.github/workflows/ci.yml     the same gate, on every push
 ```
 
 ## Styling
@@ -104,7 +114,7 @@ theme, override the palette keys — no C# changes needed.
 ## Tests
 
 ```powershell
-dotnet test WinCareDesktop.Tests                    # all 89
+dotnet test WinCareDesktop.Tests                    # all 110
 dotnet test WinCareDesktop.Tests --filter Category=Ui   # UI only
 ```
 
@@ -177,6 +187,48 @@ Two caveats if you extend it:
   `DependencyObject`s from the wrong thread, which looks exactly like an app bug
   but is an artefact of the harness. (The underlying app bug was real, though:
   `VM` was being dereferenced inside `Task.Run`.)
+- Wait for the *expected* panel heading **and** for every loading string to be
+  gone. Async panels reuse one heading for both their placeholder and their
+  finished content, so matching on the heading alone captures the placeholder —
+  or, for the uninstall panel, captures it after the desktop apps have loaded but
+  before the Store app pass finishes, which looks exactly like Store apps being
+  missing.
+
+### Hover states cannot be captured here
+
+The harness reports hover **coverage** — every clickable card defines a hover
+style that changes something visible — but it does not and cannot rasterise an
+actual hover frame, in this environment or headless CI.
+
+Two approaches were tried and both failed for real reasons:
+
+- Writing `IsMouseOver` directly. It is a read-only `DependencyProperty` that
+  WPF sets with an internal authorisation key. `SetValue` throws, and there is no
+  backing CLR field or internal setter to reach.
+- Moving the real cursor with `SetCursorPos`. The call returns `true` and the
+  cursor genuinely moves, but the session delivers no mouse input to WPF at all —
+  `Mouse.DirectlyOver` stays `null` and `IsMouseOver` is never set.
+
+So all 11 clickable cards are confirmed to *have* working hover styling, but
+whether that styling *looks* right still needs a real interactive session. This
+is the one part of the UI that has never been seen responding to a mouse.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request, on
+`windows-latest`:
+
+- clean build with `--no-incremental`, then the full test suite
+- single-file publish, verified to produce an executable
+- `Tools/RenderShots` over every panel, requiring at least 12 screenshots, with
+  the PNGs uploaded as an artifact so a visual regression can be diffed
+- a check that the working tree is clean afterwards, which catches a build
+  writing into a tracked path that `.gitignore` does not cover
+- `dotnet list package --vulnerable --include-transitive`
+
+Windows only. A WPF app cannot restore on a Linux runner, and
+`PresentationNative_cor3.dll` will not load there, so the UI tests and the
+render harness both require Windows.
 
 ## Requirements
 

@@ -9,7 +9,9 @@ TestResults/
 *.dmp
 *.hangdump
 
-## Screenshots produced by Tools/RenderShots
+## Screenshots produced by Tools/RenderShots. Its default output directory is
+## "shots" (CWD-relative), which is what CI writes into.
+shots/
 screenshots/
 *.png
 

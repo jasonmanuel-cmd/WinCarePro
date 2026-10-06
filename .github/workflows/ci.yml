@@ -1,0 +1,125 @@
+name: CI
+
+# Runs the same gate locally does: clean, build, test, publish. The point is
+# that a stale WinCare Pro.dll in the test output has repeatedly produced
+# phantom results on this machine, and a broken commit should not wait for
+# someone to notice.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    # Windows, because this is a WPF app: net8.0-windows with UseWPF will not
+    # restore on Linux, and the UI tests construct a real Window on an STA
+    # thread. A Linux runner would fail for reasons unrelated to the change.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Keep the WPF designer out of the way and stop NuGet writing to a
+      # machine-global packages folder, which is not writable on hosted runners.
+      - name: Environment
+        run: |
+          $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+          $env:DOTNET_NOLOGO = '1'
+          $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-
+
+      # --no-incremental, because incremental builds are the other half of the
+      # stale-dll problem this repo keeps running into.
+      - name: Build
+        run: dotnet build WinCareDesktop.csproj -c Release --no-incremental --nologo -v minimal
+
+      # Capture to a file and echo it. Streaming WPF test output directly to the
+      # console deadlocks the runner.
+      - name: Test
+        run: |
+          $log = "test-output.log"
+          dotnet test WinCareDesktop.Tests\WinCareDesktop.Tests.csproj `
+            -c Release --nologo -v quiet *>&1 | Tee-Object -FilePath $log | Out-Null
+          Get-Content $log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # The tests build a real MainWindow and the render harness needs WPF, so
+      # this is the cheapest way to prove the publish path still works.
+      - name: Publish
+        run: dotnet publish WinCareDesktop.csproj -c Release -r win-x64 `
+          --self-contained true -p:PublishSingleFile=true `
+          -o publish --nologo -v minimal
+
+      - name: Verify single-file output
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem publish -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "publish produced no executable" }
+          $mb = [math]::Round($exe.Length / 1MB, 1)
+          Write-Host "published $($exe.Name) ($mb MB)"
+
+      # WPF cannot load PresentationNative_cor3.dll on a Linux runner, so the
+      # offscreen render harness only runs on Windows. Here it runs headless.
+      - name: Render every panel offscreen
+        run: |
+          $log = "render-output.log"
+          dotnet run --project Tools\RenderShots -c Release -- *>&1 |
+            Tee-Object -FilePath $log | Out-Null
+          Get-Content $log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $shots = @(Get-ChildItem shots -Filter *.png -ErrorAction SilentlyContinue)
+          Write-Host "rendered $($shots.Count) screenshot(s)"
+          if ($shots.Count -lt 12) {
+            throw "expected at least 12 screenshots, got $($shots.Count)"
+          }
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/*.png
+          if-no-files-found: ignore
+
+      - name: Check nothing tracked regressed
+        shell: pwsh
+        run: |
+          # Fail on a dirty tree, which means the build wrote into a tracked
+          # path and the .gitignore needs a new entry.
+          $dirty = git status --porcelain
+          if ($dirty) {
+            Write-Host "working tree is dirty after the build:"
+            Write-Host $dirty
+            throw "build produced tracked-file changes"
+          }
+
+  security:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # The app takes no input from a network, so there is no Web surface to
+      # scan. Dependency advisories are the remaining real risk.
+      - name: List vulnerable packages
+        run: dotnet list package --vulnerable --include-transitive
+
+      - name: Warn on outdated direct dependencies
+        continue-on-error: true
+        run: dotnet list package --outdated

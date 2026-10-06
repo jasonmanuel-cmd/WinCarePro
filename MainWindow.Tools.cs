@@ -27,6 +27,14 @@ public partial class MainWindow
     private readonly InstalledProgramsService _programs = new();
     private readonly StorageCleanupService _storage = new();
     private readonly PowerService _power = new();
+    private readonly AppxService _appx = new();
+
+    // Both program kinds in one list. Win32 apps come from the uninstall
+    // registry, Store apps from Get-AppxPackage; they are genuinely different
+    // removal mechanisms, so InstalledProgram carries an UninstallKind rather
+    // than pretending there is one code path.
+    private List<InstalledProgram> _programCache = new();
+    private string _programFilter = "";
 
     // ── Shared chrome ─────────────────────────────────────────────────────
 
@@ -580,19 +588,17 @@ public partial class MainWindow
 
     // ── Uninstall Programs card ───────────────────────────────────────────
 
-    private string _programFilter = "";
-    private List<InstalledProgram> _programCache = new();
-
     private FrameworkElement BuildUninstallPrograms()
     {
         var sp = new StackPanel { Width = 700 };
 
         sp.Children.Add(new TextBlock
         {
-            Text = "Every program Windows has registered an uninstaller for, largest first. " +
-                   "WinCare runs the vendor's own uninstaller and never deletes a program's " +
-                   "folder, because that leaves registry keys and services behind and breaks " +
-                   "uninstall and repair.",
+            Text = "Every program WinCare can remove: desktop apps from the uninstall registry " +
+                   "and Microsoft Store apps, largest known installs first. " +
+                   "WinCare always uses the program's own removal path and never deletes " +
+                   "an install folder, because that leaves registry keys and services " +
+                   "behind and breaks uninstall and repair.",
             FontSize = 12,
             Foreground = TextSecondary,
             FontFamily = SansFont,
@@ -652,14 +658,55 @@ public partial class MainWindow
             RefreshProgramList(listHost, summary);
         };
 
-        // Enumerating every uninstall key touches dozens of registry hives, so it
-        // must not run on the UI thread.
+        // Enumerating every uninstall key touches dozens of registry hives, and
+        // Get-AppxPackage spawns PowerShell and takes several seconds. Neither
+        // may run on the UI thread.
+        //
+        // Win32 apps load first so the list is usable quickly; Store apps
+        // arrive in a second pass and the list is refreshed again. Doing it in
+        // one batch would mean waiting on PowerShell before showing anything.
         _ = Task.Run(() => _programs.GetInstalledPrograms())
                  .ContinueWith(t =>
                  {
                      if (t.IsFaulted) return;
                      _programCache = t.Result;
                      Dispatcher.Invoke(() => RefreshProgramList(listHost, summary));
+                 });
+
+        var storeStatus = new TextBlock
+        {
+            Text = "Looking for Microsoft Store apps…",
+            FontSize = 11,
+            Foreground = TextTertiary,
+            FontFamily = SansFont,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        sp.Children.Add(storeStatus);
+
+        _ = Task.Run(() => _appx.GetStoreApps())
+                 .ContinueWith(t =>
+                 {
+                     Dispatcher.Invoke(() =>
+                     {
+                         if (t.IsFaulted || t.Result.Count == 0)
+                         {
+                             storeStatus.Visibility = Visibility.Collapsed;
+                             return;
+                         }
+
+                         // Already-loaded cache may have been replaced by a
+                         // refresh in the meantime, so re-append rather than
+                         // assign.
+                         _programCache = _programCache
+                             .Where(p => p.Kind != UninstallKind.Appx)
+                             .Concat(t.Result)
+                             .OrderByDescending(p => p.SizeKnown)
+                             .ThenByDescending(p => p.SizeBytes)
+                             .ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
+                             .ToList();
+                         storeStatus.Visibility = Visibility.Collapsed;
+                         RefreshProgramList(listHost, summary);
+                     });
                  });
 
         return sp;
@@ -716,7 +763,18 @@ public partial class MainWindow
             TextTrimming = TextTrimming.CharacterEllipsis
         });
 
-        var detail = new List<string> { program.DisplaySize };
+        // Store apps publish no install size, so saying "size unknown" on 60 rows is
+        // noise. Their origin is the more useful label.
+        var detail = new List<string>();
+        if (program.Kind == UninstallKind.Appx)
+        {
+            detail.Add(program.Source);
+        }
+        else
+        {
+            detail.Add(program.DisplaySize);
+        }
+
         if (program.Publisher.Length > 0) detail.Add(program.Publisher);
         if (program.Version.Length > 0) detail.Add("v" + program.Version);
         if (program.InstallDate.Length > 0) detail.Add("installed " + program.InstallDate);
@@ -746,6 +804,15 @@ public partial class MainWindow
     /// </summary>
     private void ConfirmUninstall(InstalledProgram program)
     {
+        // Store apps have no uninstall string at all, so routing them through
+        // the classic path would report "this program does not publish an
+        // uninstaller" for every one of them - which is true and useless.
+        if (program.Kind == UninstallKind.Appx)
+        {
+            ConfirmUninstallStoreApp(program);
+            return;
+        }
+
         if (!InstalledProgramsService.TryBuildUninstallCommand(
                 program, out var file, out var args, out var warning))
         {
@@ -840,8 +907,12 @@ public partial class MainWindow
                     Kind = UndoKind.DisplayOnly
                 });
 
-                // The registry has changed; refresh the list behind this dialog.
-                _programCache = new List<InstalledProgram>();
+                // The registry has changed; drop the cache so the list behind this
+                // dialog is rebuilt from the system rather than showing a
+                // program that is no longer installed.
+                _programCache = _programCache
+                    .Where(p => p.Kind != UninstallKind.Classic)
+                    .ToList();
                 ShowSub("Uninstall programs",
                     code == 0
                         ? $"{program.Name} was uninstalled. It is recorded in Undo History."
@@ -851,6 +922,136 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 ShowSub("Uninstall programs", "Could not launch the uninstaller: " + ex.Message);
+            }
+        };
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        buttons.Children.Add(run);
+        sp.Children.Add(buttons);
+
+        ShowSub($"Uninstall {program.Name}", sp);
+    }
+
+    /// <summary>
+    /// Two-step uninstall for a Store app, which has no uninstall string and is
+    /// removed through Appx rather than by launching an executable.
+    /// </summary>
+    private void ConfirmUninstallStoreApp(InstalledProgram program)
+    {
+        var sp = new StackPanel { Width = 640 };
+
+        sp.Children.Add(new TextBlock
+        {
+            Text = program.Name,
+            FontSize = 18,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = TextPrimary,
+            FontFamily = SansFont,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+
+        var detail = new List<string> { "Microsoft Store app" };
+        if (program.Publisher.Length > 0) detail.Add(program.Publisher);
+        if (program.Version.Length > 0) detail.Add("v" + program.Version);
+
+        sp.Children.Add(new TextBlock
+        {
+            Text = string.Join("  ·  ", detail),
+            FontSize = 12,
+            Foreground = TextSecondary,
+            FontFamily = SansFont,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 14)
+        });
+
+        sp.Children.Add(new Border
+        {
+            Background = SurfaceHover,
+            BorderBrush = Hairline,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(12, 10, 12, 10),
+            Margin = new Thickness(0, 0, 0, 14),
+            Child = new TextBlock
+            {
+                Text = program.PackageFullName,
+                FontSize = 11,
+                Foreground = TextPrimary,
+                FontFamily = MonoFont,
+                TextWrapping = TextWrapping.Wrap
+            }
+        });
+
+        sp.Children.Add(new TextBlock
+        {
+            Text = "Removing a Store app deletes its data too, and Windows offers no way " +
+                   "to reinstall it without a network connection and a valid store " +
+                   "licence. WinCare cannot undo this.",
+            FontSize = 12,
+            Foreground = Warning,
+            FontFamily = SansFont,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 16)
+        });
+
+        var status = new TextBlock
+        {
+            Text = "",
+            FontSize = 12,
+            Foreground = TextSecondary,
+            FontFamily = SansFont,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        sp.Children.Add(status);
+
+        var run = MakeFlatButton("Remove the app", ErrorBrush);
+        run.Click += async (_, _) =>
+        {
+            run.IsEnabled = false;
+            run.Content = "Removing…";
+            status.Text = "Running Remove-AppxPackage…";
+            status.Foreground = TextSecondary;
+
+            try
+            {
+                var (ok, message) = await Task.Run(() =>
+                    _appx.RemoveStoreApp(program.PackageFullName, program.Name));
+
+                status.Text = message;
+                status.Foreground = ok ? Success : Warning;
+
+                if (ok)
+                {
+                    VM.Service.PushUndoTransaction(new OptimizationTransaction
+                    {
+                        Title = $"Removed Store app {program.Name}",
+                        Description = "Remove-AppxPackage completed. Windows offers no way to " +
+                                      "restore a Store app from WinCare.",
+                        Kind = UndoKind.DisplayOnly
+                    });
+
+                    // Drop it from the cache so the list behind this panel no
+                    // longer offers an app that is gone.
+                    _programCache = _programCache
+                        .Where(p => p.PackageFullName != program.PackageFullName)
+                        .ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                status.Text = "Could not remove the app: " + ex.Message;
+                status.Foreground = Warning;
+            }
+            finally
+            {
+                run.IsEnabled = true;
+                run.Content = "Remove the app";
             }
         };
 

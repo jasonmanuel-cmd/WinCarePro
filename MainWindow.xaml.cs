@@ -209,38 +209,51 @@ public MainWindow()
         var card = new Border
         {
             Style = (Style)FindResource("Card"),
-            Margin = new Thickness(0, 0, 0, 16),
-            Padding = new Thickness(24, 20, 24, 20)
+            Margin = new Thickness(0, 0, 0, 12),
+            // Tighter than the old 24,20,24,20. Combined with the smaller ring
+            // this is what buys back the vertical space for the card list.
+            Padding = new Thickness(24, 14, 24, 14)
         };
 
+        // Declared before first use: the column width below is sized from it.
+        const int RingSize = 88;
+
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(RingSize) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         // ── Score ring ──
-        // Circumference of the 100x100 ring (r=50) minus half the 10px stroke
-        // on each side, so the arc maths matches what is actually painted.
-        _ringCircumference = 2 * Math.PI * 45.0;
+        // Circumference of the ring (r = size/2) minus half the stroke on each
+        // side, so the arc maths matches what is actually painted.
+        //
+        // The ring is 88px rather than the original 120px host. At 720px window
+        // height the hero pushed everything below it off-screen: only two and a
+        // half of the module cards were reachable without scrolling. The score
+        // is legible at this size and the space goes to the tools instead.
+        const int RingStroke = 9;
+        var ringDiameter = RingSize - (RingStroke * 2);
 
-        var ringCanvas = new Canvas { Width = 120, Height = 120 };
+        _ringCircumference = 2 * Math.PI * (ringDiameter / 2.0 - RingStroke / 2.0);
+
+        var ringCanvas = new Canvas { Width = RingSize, Height = RingSize };
         var track = new Ellipse
         {
-            Width = 100,
-            Height = 100,
+            Width = ringDiameter,
+            Height = ringDiameter,
             Stroke = Hairline,
-            StrokeThickness = 10,
+            StrokeThickness = RingStroke,
             Fill = Brushes.Transparent
         };
-        Canvas.SetLeft(track, 10);
-        Canvas.SetTop(track, 10);
+        Canvas.SetLeft(track, RingStroke);
+        Canvas.SetTop(track, RingStroke);
         ringCanvas.Children.Add(track);
 
         _scoreRing = new Ellipse
         {
-            Width = 100,
-            Height = 100,
+            Width = ringDiameter,
+            Height = ringDiameter,
             Stroke = Primary,
-            StrokeThickness = 10,
+            StrokeThickness = RingStroke,
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round,
             StrokeDashCap = PenLineCap.Round,
@@ -250,14 +263,14 @@ public MainWindow()
             RenderTransform = new RotateTransform(-90),
             Effect = new DropShadowEffect { Color = PrimaryColor, BlurRadius = 14, ShadowDepth = 0, Opacity = 0.18 }
         };
-        Canvas.SetLeft(_scoreRing, 10);
-        Canvas.SetTop(_scoreRing, 10);
+        Canvas.SetLeft(_scoreRing, RingStroke);
+        Canvas.SetTop(_scoreRing, RingStroke);
         ringCanvas.Children.Add(_scoreRing);
 
         _scoreLabelBig = new TextBlock
         {
             Text = "—",
-            FontSize = 32,
+            FontSize = 26,
             FontWeight = FontWeights.Bold,
             Foreground = Primary,
             FontFamily = MonoFont,
@@ -265,7 +278,7 @@ public MainWindow()
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        var ringHost = new Grid { Width = 120, Height = 120 };
+        var ringHost = new Grid { Width = RingSize, Height = RingSize };
         ringHost.Children.Add(ringCanvas);
         ringHost.Children.Add(_scoreLabelBig);
         grid.Children.Add(ringHost);
@@ -285,12 +298,12 @@ public MainWindow()
             FontSize = 11,
             Foreground = TextTertiary,
             FontFamily = MonoFont,
-            Margin = new Thickness(0, 8, 0, 6)
+            Margin = new Thickness(0, 4, 0, 4)
         });
         copy.Children.Add(new TextBlock
         {
             Text = "RAM headroom, free disk, and privacy shields, weighted from this PC's live readings.",
-            FontSize = 13,
+            FontSize = 12,
             Foreground = TextSecondary,
             TextWrapping = TextWrapping.Wrap
         });
@@ -1277,7 +1290,10 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
 
     private FrameworkElement BuildBloatwareContent()
     {
-        var sp = new StackPanel { Width = 460 };
+        // Wide enough that the reason text gets a real column to wrap in.
+        // At 460 the Uninstall button squeezed the text column narrow enough
+        // that descriptions were cut off rather than wrapped.
+        var sp = new StackPanel { Width = 620 };
         if (VM.BloatwareApps.Count == 0)
         {
             sp.Children.Add(new TextBlock
@@ -1323,7 +1339,10 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
                 Foreground = TextTertiary,
                 FontFamily = SansFont,
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 300,
+                // No MaxWidth here. A hard cap of 300 sat inside a star column
+                // that was already narrower than 300, so long reasons were being
+                // clipped rather than wrapped. Letting the column decide the
+                // wrap width is what TextWrapping is for.
                 Margin = new Thickness(0, 2, 0, 0)
             });
             rg.Children.Add(textPanel);

@@ -147,6 +147,22 @@ public class InstalledProgram
     /// <summary>True for Windows components and updates, which must not be offered.</summary>
     public bool IsSystemComponent { get; set; }
 
+    /// <summary>
+    /// Which removal mechanism applies. Store apps are not in the uninstall
+    /// registry at all, so they are enumerated through Appx and removed with
+    /// Remove-AppxPackage instead of an uninstall string.
+    /// </summary>
+    public UninstallKind Kind { get; set; } = UninstallKind.Classic;
+
+    /// <summary>
+    /// Package identity for an Appx app, e.g. <c>Microsoft.WindowsCalculator_11.2307.0.0_x64__8wekyb3d8bbwe</c>.
+    /// Empty for classic apps.
+    /// </summary>
+    public string PackageFullName { get; set; } = "";
+
+    /// <summary>Where WinCare got this row from, for display.</summary>
+    public string Source => Kind == UninstallKind.Appx ? "Microsoft Store" : "Win32";
+
     public string DisplaySize => SizeKnown ? FormatBytes(SizeBytes) : "size unknown";
 
     public static string FormatBytes(long bytes)
@@ -158,6 +174,20 @@ public class InstalledProgram
         while (v >= 1024 && i < units.Length - 1) { v /= 1024; i++; }
         return $"{v:0.#} {units[i]}";
     }
+}
+
+/// <summary>How a program's removal has to be carried out.</summary>
+public enum UninstallKind
+{
+    /// <summary>Classic Win32 app, removed via a registered uninstall string.</summary>
+    Classic = 0,
+
+    /// <summary>
+    /// Store / packaged app. These never appear in the uninstall registry, so
+    /// they are enumerated separately and removed through Appx rather than by
+    /// running an executable.
+    /// </summary>
+    Appx = 1,
 }
 
 /// <summary>A folder that is consuming disproportionate space.</summary>

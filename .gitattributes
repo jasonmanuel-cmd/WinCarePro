@@ -1,0 +1,20 @@
+# Normalise line endings so a file edited on either platform does not show as
+# fully rewritten just because git checked it out with the other convention.
+# Without this, every diff on Windows is drowned in CR/LF noise.
+* text=auto
+
+*.cs       text diff=csharp
+*.xaml     text
+*.csproj   text
+*.ps1      text
+*.md       text
+*.yml      text
+*.json     text
+*.bat      text
+
+# Anything genuinely binary.
+*.png      binary
+*.ico      binary
+*.dll      binary
+*.exe      binary
+*.zip      binary
