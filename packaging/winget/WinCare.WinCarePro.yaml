@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.schema.json
+# Mirrors manifests/w/WinCare/WinCarePro/1.0.0/ in microsoft/winget-pkgs.
+# Copy all three files after forking winget-pkgs. Fill in SHA256 post-release.
+PackageIdentifier: WinCare.WinCarePro
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: WinCare
+PublisherUrl: https://github.com/jasonmanuel-cmd/WinCarePro
+PackageName: WinCare Pro
+License: MIT
+LicenseUrl: https://github.com/jasonmanuel-cmd/WinCarePro/blob/master/LICENSE.md
+ShortDescription: Local-first Windows maintenance toolkit — disk cleanup, RAM optimization, privacy shield, uninstall management. Fully offline, no telemetry.
+Moniker: wincare
+Tags:
+  - windows
+  - maintenance
+  - cleanup
+  - privacy
+Installers:
+  - Architecture: x64
+    InstallerType: msi
+    InstallerUrl: https://github.com/jasonmanuel-cmd/WinCarePro/releases/download/v1.0.0/WinCare.msi
+    InstallerSha256: <SHA256_OF_WinCare.msi>
+    ProductCode: '{00000000-0000-0000-0000-000000000000}'
+ManifestType: singleton
+ManifestVersion: 1.6.0

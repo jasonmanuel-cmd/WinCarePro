@@ -1,0 +1,8 @@
+Place a file named `update-source.txt` next to WinCare Pro.exe with contents:
+
+{ "version": "1.0.0", "url": "https://github.com/jasonmanuel-cmd/WinCarePro/releases/latest" }
+
+The app's Diagnostics panel update check reads this file and compares against
+the running version. Host it on any free HTTPS endpoint (GitHub Releases raw
+asset, Cloudflare Pages, gist) — it is the only network call the app ever makes
+and only when the user clicks "Check for updates".
