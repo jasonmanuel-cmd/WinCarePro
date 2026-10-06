@@ -43,6 +43,16 @@
            Compressed="yes"
            InstallerVersion="500">
 
+    <!--
+      Embed the payload cabinet into the MSI itself. Without this, WiX emits a
+      single external cab1.cab next to the MSI, and any environment that only
+      retrieves the .msi file (release download, winget InstallerUrl) fails with
+      Error 1311 "Source file not found (cabinet)". After this change the MSI
+      is the single self-contained installer: winget downloads exactly the one
+      file named in InstallerUrl.
+    -->
+    <MediaTemplate EmbedCab="yes" CompressionLevel="mszip" />
+
     <SummaryInformation Description="$(ProductName) installer" />
 
     <!--
