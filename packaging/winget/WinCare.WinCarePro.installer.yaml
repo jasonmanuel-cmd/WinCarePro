@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+# Mirrors manifests/w/WinCare/WinCarePro/1.0.0/WinCare.WinCarePro.installer.yaml in microsoft/winget-pkgs.
+# InstallerSha256 / ProductCode extracted from installer/WinCare.msi after the v1.0.0 release build.
+PackageIdentifier: WinCare.WinCarePro
+PackageVersion: 1.0.0
+Platform:
+  - Windows.Desktop
+MinimumOSVersion: 10.0.17763.0
+InstallerType: msi
+Scope: machine
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+InstallerSwitches:
+  Custom: /norestart
+UpgradeBehavior: install
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/jasonmanuel-cmd/WinCarePro/releases/download/v1.0.0/WinCare.msi
+    InstallerSha256: E0BDAC0545379932EDD21E3A510DEBF3B08D207111EB4EBB78DF872A484C6C56
+    ProductCode: '{F0F1AF4E-F698-484E-9989-9C67130C42F7}'
+ManifestType: installer
+ManifestVersion: 1.6.0
