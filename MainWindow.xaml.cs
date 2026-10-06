@@ -1221,6 +1221,46 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
             }
         }
 
+        sp.Children.Add(new Button
+        {
+            Content = "Check for updates",
+            Margin = new Thickness(0, 12, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(10, 4, 10, 4)
+        });
+
+        // Wired after construction so the button reference stays in scope for
+        // the click handler without a field on the window.
+        ((Button)sp.Children[sp.Children.Count - 1]).Click += async (_, _) =>
+        {
+            var manifestPath = System.IO.Path.Combine(
+                AppContext.BaseDirectory, "update-source.txt");
+
+            if (!System.IO.File.Exists(manifestPath))
+            {
+                MessageBox.Show(
+                    "No update source is configured.\n\n" +
+                    "Create 'update-source.txt' next to the exe containing a URL to a JSON version manifest.\n" +
+                    "Example: { \"version\": \"1.1.0\" }",
+                    "WinCare Pro", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var url = System.IO.File.ReadAllText(manifestPath).Trim();
+            var checker = new Services.UpdateChecker();
+            var current = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetName().Version?.ToString(3) ?? "0.0.0";
+
+            var r = await checker.CheckAsync(url, current);
+            MessageBox.Show(
+                r.Error is null
+                    ? (r.IsUpdateAvailable
+                        ? $"Update available: {r.LatestVersion} (you have {r.CurrentVersion})."
+                        : $"You are on the latest version ({r.CurrentVersion}).")
+                    : $"Update check failed: {r.Error}",
+                "WinCare Pro", MessageBoxButton.OK, MessageBoxImage.Information);
+        };
+
         return sp;
     }
 

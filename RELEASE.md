@@ -112,6 +112,26 @@ Options, roughly in order of effort:
 - **winget manifest.** Cheap to add on top of a signed MSI, and puts the app in
   `winget search` and `winget install`. Good reach for a technical audience.
 
+### Free update endpoint
+
+The app's update check is manual and reads its target from
+`update-source.txt` next to the exe. Point it at a public GitHub Releases
+manifest (free) or any HTTPS endpoint that serves:
+
+```json
+{ "version": "1.1.0" }
+```
+
+No server to run, no recurring cost, and the privacy promise stays intact
+because the call only happens when the user clicks *Check for updates*.
+
+### Free monetization path
+
+If you ever want revenue without building a store SKU: ship the signed MSI for
+free, put a "Buy me a coffee"/Ko-fi link in the Diagnostics panel footer (the
+button I just added sits right under the diagnostics rows), and let the
+privacy stance be the marketing. v1.0 is freeware.
+
 ## Known limitations to disclose
 
 - Verified only on Windows 10/11 x64. The uninstaller, power-plan and DISM
