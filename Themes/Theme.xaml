@@ -20,7 +20,7 @@
     <Color x:Key="PrimaryDarkColor">#0A7C72</Color>
     <Color x:Key="PrimaryLightColor">#CCFBF0</Color>
 
-    <SolidColorBrush x:Key="BgBrush"        Color="#F1F5F9" />
+    <SolidColorBrush x:Key="BgBrush"        Color="#EEF2F7" />
     <SolidColorBrush x:Key="Surface"        Color="#FFFFFF" />
     <SolidColorBrush x:Key="SurfaceHover"   Color="#F8FAFC" />
     <SolidColorBrush x:Key="Primary"        Color="{DynamicResource PrimaryColor}" />
@@ -89,6 +89,9 @@
                 <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.07" Color="#000000" />
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <!-- No hover on the base card style; interactive cards override this -->
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="ClickableRow" TargetType="Border" BasedOn="{StaticResource Card}">
@@ -148,7 +151,7 @@
         <Setter Property="Padding" Value="22,12,22,12" />
         <Setter Property="Effect">
             <Setter.Value>
-                <DropShadowEffect Color="{DynamicResource PrimaryColor}" BlurRadius="20" ShadowDepth="2" Opacity="0.18" />
+                <DropShadowEffect Color="{DynamicResource PrimaryColor}" BlurRadius="24" ShadowDepth="3" Opacity="0.22" />
             </Setter.Value>
         </Setter>
         <Style.Triggers>
@@ -156,7 +159,7 @@
                 <Setter Property="Background" Value="{DynamicResource PrimaryDark}" />
                 <Setter Property="Effect">
                     <Setter.Value>
-                        <DropShadowEffect Color="{DynamicResource PrimaryColor}" BlurRadius="26" ShadowDepth="4" Opacity="0.24" />
+                        <DropShadowEffect Color="{DynamicResource PrimaryColor}" BlurRadius="32" ShadowDepth="5" Opacity="0.30" />
                     </Setter.Value>
                 </Setter>
             </Trigger>
