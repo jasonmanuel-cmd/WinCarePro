@@ -1,0 +1,134 @@
+# Release checklist
+
+Everything that has to be true before WinCare Pro is offered to anyone. Ordered
+so that the things which cost real money or real time come first.
+
+## 1. Code signing — non-negotiable
+
+An unsigned Windows executable triggers SmartScreen on first launch, and Windows
+Defender's reputation system treats an unknown binary as suspect. Users see
+"Windows protected your PC". For a paid product that is a dead sale.
+
+**This is the one thing that cannot be automated away.** It needs a code signing
+certificate bought from a CA:
+
+| Type | Cost | Effect |
+|---|---|---|
+| OV (Organisation Validation) | ~$70–200/yr | SmartScreen reputation builds over time, hundreds of downloads |
+| EV (Extended Validation) | ~$250–500/yr | Immediate reputation, but requires a phone/video identity check |
+
+For a first commercial release, EV is the better buy: the reputation problem is
+the single biggest source of refund requests, and EV avoids it entirely. A CA
+that sells cheap code signing without a real identity check is not worth using —
+the certificate will be revoked.
+
+Once the `.pfx` exists:
+
+```powershell
+$env:WINCARE_SIGN_PFX     = "path\to\cert.pfx"
+$env:WINCARE_SIGN_PWD     = "password"
+.\sign-release.ps1
+```
+
+The certificate and password must never be committed. `sign-release.ps1` reads
+them from environment variables for that reason, and `.gitignore` blocks
+`*.pfx`.
+
+## 2. Decide what is being sold
+
+- Name. "WinCare Pro" is fine but generic and unsearchable. Check the
+  trademark and the Microsoft Store name before committing to it.
+- Price. Nothing in the app enforces this. Selling means either a store listing
+  (which handles payment and licensing) or a licence key checked at startup.
+  See §6.
+- Publisher identity. The `.csproj` says `Company=WinCare`, which shows up in
+  Explorer and Add/Remove Programs. Put a real entity there.
+- Support address. The crash message points users at a log file. They need
+  somewhere to send it.
+
+## 3. Installer
+
+```powershell
+.\build-installer.ps1
+```
+
+Produces `installer\WinCarePro-1.0.0.msi`. WiX is required:
+
+```powershell
+dotnet tool install --global wix
+```
+
+The MSI installs per-user, needs no elevation, registers in Add/Remove
+Programs, and uninstalls cleanly while leaving the user's undo history alone.
+
+## 4. Pre-flight checks
+
+```powershell
+.\build-release.ps1          # clean, build, test, publish
+.\build-installer.ps1        # MSI
+dotnet run --project Tools\RenderShots -c Release -- "$env:TEMP\shots"
+```
+
+Then **open the app and click everything.** The render harness produces PNGs of
+all 12 panels and is the fastest way to spot a layout regression, but it cannot
+test hover, keyboard focus, or anything that depends on real timing. Those need
+a person.
+
+Specifically check:
+
+- Every dashboard card opens its menu
+- Uninstall Programs lists both desktop and Store apps
+- Hover state is visible on all 11 cards — **never yet verified by anyone**
+- A second launch focuses the existing window instead of opening a second copy
+- DPI at 100%, 125%, 150% and 200%
+- Closing the window leaves no process behind
+- `%LOCALAPPDATA%\WinCarePro\crash.log` does not appear
+
+## 5. Legal
+
+Drafted and in the repo:
+
+- `LICENSE.md`
+- `PRIVACY.md`
+- `EULA.md`
+
+Read them before publishing. They were written to match what the app actually
+does — no telemetry, no network calls, all data local — but they are a starting
+point, not legal advice, and the warranty disclaimer in particular should be
+reviewed by whoever is actually the seller.
+
+## 6. Distribution
+
+The app is `net8.0-windows`, self-contained, and single-file. It needs Windows
+10 1809 or later, x64. No .NET runtime required on the target machine.
+
+Options, roughly in order of effort:
+
+- **Direct download** from a site. Simplest. Needs the MSI signed (§1) and a
+  download page that states the system requirements plainly.
+- **Microsoft Store.** MSIX packaging rather than MSI, so this is a different
+  build. Handles payment, updates and reputation. Requires a Partner Center
+  account and a passing review, which takes days and enforces its own policies.
+- **winget manifest.** Cheap to add on top of a signed MSI, and puts the app in
+  `winget search` and `winget install`. Good reach for a technical audience.
+
+## Known limitations to disclose
+
+- Verified only on Windows 10/11 x64. The uninstaller, power-plan and DISM
+  paths depend on tools that are not present on every SKU.
+- The uninstaller reads the classic registry and `Get-AppxPackage`. It will not
+  see portable apps or anything installed outside the standard mechanisms.
+- DISM component cleanup cannot be interrupted once started.
+- Uninstalling cannot be undone. History records it, but offers no rollback.
+- Hover styling has never been confirmed on a real display.
+
+## What is already verified
+
+- 110 tests, 0 warnings, clean build.
+- Every service that can be tested against real system state is, and those
+  assertions caught a genuinely dead feature (the power-plan switcher) that no
+  structural test would have found.
+- Test runs never write to the real undo history.
+- Single-instance guard verified by launching two real processes, and verified
+  again after a force-kill to confirm an abandoned mutex does not block
+  relaunch.

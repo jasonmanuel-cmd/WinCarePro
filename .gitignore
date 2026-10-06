@@ -15,6 +15,22 @@ shots/
 screenshots/
 *.png
 
+## ...except the icon PNGs, which are source assets. The .ico is generated from
+## the same vector mark by Tools/MakeIcon and is committed alongside them so a
+## clean clone builds with no image tooling. The PNGs are the reviewable form of
+## each frame. Negation has to come after the rule above, and needs the
+## directory anchor or git will not descend into Assets to find them.
+!Assets/*.png
+
+## Installer output. The .wxs source is committed; everything WiX produces from
+## it is not. That includes the 36MB MSI plus the .cab and .wixpdb it leaves
+## behind as build intermediates.
+installer/*.msi
+installer/*.wixpdb
+installer/*.cab
+installer/obj/
+installer/bin/
+
 ## Editor / OS noise
 .vs/
 .idea/

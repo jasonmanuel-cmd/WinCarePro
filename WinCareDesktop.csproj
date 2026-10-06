@@ -1,5 +1,27 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Application manifest.
+
+    Three things here that the SDK does not do on its own:
+
+    1. DPI awareness. Without PerMonitorV2, Windows bitmaps the window when the
+       user moves it between monitors with different scaling, and the UI goes
+       soft and slightly wrong. Opting in is required for that to work.
+
+    2. requestedExecutionLevel asInvoker. The app can work without elevation -
+       only DNS switching and some uninstalls need it, and the UI already
+       offers a relaunch button for those. A requireAdministrator manifest
+       would make Windows UAC-prompt on every launch, including for the common
+       case of just looking at the health score.
+
+    3. longPathAware. Harmless on this codebase today, but it means a
+       MAX_PATH install location cannot cause a baffling failure later.
+  -->
+  <PropertyGroup>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -7,9 +29,39 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AssemblyName>WinCare Pro</AssemblyName>
+
+    <!-- Shown in Explorer, Add/Remove Programs and the taskbar. -->
     <Product>WinCare Pro</Product>
+    <Company>WinCare</Company>
+    <Authors>WinCare</Authors>
+    <Copyright>Copyright (c) 2026 WinCare</Copyright>
+    <!--
+      Explorer shows FileDescription from the assembly title, not Description,
+      so the title carries the human sentence and Description stays as the
+      metadata description.
+    -->
+    <AssemblyTitle>System health optimizer for Windows</AssemblyTitle>
+    <Description>System health optimizer for Windows. Measures RAM, disk, power and privacy state, scores overall headroom, and offers tools for each.</Description>
+
+    <!--
+      Without this the SDK appends "+<commit sha>" to ProductVersion, which is
+      correct for a build server and wrong in a shipping product: it leaks the
+      source revision into a string users and stores display verbatim.
+    -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <!--
+      Version feeds the exe's file properties and is what Windows Installer
+      uses to decide whether an upgrade is newer. 1.0.0 is the first public
+      build.
+    -->
     <Version>1.0.0</Version>
-    <Description>System health optimizer for Windows</Description>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+
+    <ApplicationIcon>Assets\WinCarePro.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +76,12 @@
     <Compile Remove="Tools\**\*.cs" />
     <None Remove="WinCareDesktop.Tests\**\*" />
     <None Remove="Tools\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The icon and its per-size PNGs ship in the repo so a clean clone builds
+         without any image tooling. MakeIcon regenerates them. -->
+    <None Include="Assets\**" CopyToOutputDirectory="Never" />
   </ItemGroup>
 
 </Project>

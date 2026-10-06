@@ -64,9 +64,10 @@ public MainWindow()
             // The log directory may not exist yet, so create it before writing.
             try
             {
-                var dir = System.IO.Path.GetDirectoryName(_logPath());
+                var dir = System.IO.Path.GetDirectoryName(CrashLogPath());
                 if (dir != null) Directory.CreateDirectory(dir);
-                File.WriteAllText(_logPath(), "CRASH in ctor: " + ex + Environment.NewLine + Environment.StackTrace);
+                File.WriteAllText(CrashLogPath(),
+                    "CRASH in constructor: " + ex + Environment.NewLine + ex.StackTrace);
             }
             catch { /* never let logging mask the original failure */ }
             throw;
@@ -102,8 +103,17 @@ public MainWindow()
         _pollTimer = poll;
     }
 
-    private static string _logPath() =>
-        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinCarePro", "crash.log");
+    /// <summary>
+    /// Crash log path, matching the one App writes to.
+    /// </summary>
+    /// <remarks>
+    /// Unused since crash handling moved into App, but the Diagnostics panel
+    /// offers to open this file, so the path has to stay in one place the two
+    /// agree on.
+    /// </remarks>
+    private static string CrashLogPath() => System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "WinCarePro", "crash.log");
 // ── Theme access ─────────────────────────────────────────────────────────
     // These were static readonly fields with hard-coded RGB values, duplicated
     // from Themes/Theme.xaml. They are now resolved through the merged

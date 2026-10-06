@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WinCare Pro installer.
+
+  Built with WiX v5. Requires no extensions, so it builds on a clean machine
+  with nothing but the wix dotnet tool installed.
+
+  Install scope is per-user and deliberately requests no elevation. The app runs
+  asInvoker anyway, so a per-machine install would demand admin rights for no
+  benefit while blocking installation by standard users. A per-user MSI also
+  installs without UAC, which removes a prompt that would otherwise fire on
+  every install.
+
+  The user's undo history lives in %LOCALAPPDATA%\WinCarePro, outside the install
+  location, so an upgrade or uninstall never touches it.
+
+  PAYLOAD NOTE, and this is the part that matters:
+
+  A WPF single-file publish does not actually produce a single file. The
+  managed assemblies are bundled into the exe, but the native WPF components
+  (wpfgfx_cor3.dll, PresentationNative_cor3.dll, D3DCompiler_47_cor3.dll and
+  friends) cannot be, and MSBuild leaves them beside it. An earlier version of
+  this installer shipped the exe alone and produced an MSI that installed
+  cleanly, created a Start Menu shortcut, appeared in Add/Remove Programs, and
+  then failed to launch on every machine.
+
+  So the payload is harvested from the whole publish directory with a Files
+  element rather than listing the exe by hand. Enumerating files explicitly
+  would have passed review and then broken again the next time the SDK added
+  another native component.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <?define ProductName = "WinCare Pro" ?>
+  <?define Manufacturer = "WinCare" ?>
+  <?define UpgradeGuid = "{7B2F4A19-3C5E-4D81-9A6B-2E8C4F1D7A30}" ?>
+
+  <Package Name="$(ProductName)"
+           Manufacturer="$(Manufacturer)"
+           Version="1.0.0"
+           UpgradeCode="$(UpgradeGuid)"
+           Scope="perUser"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <SummaryInformation Description="$(ProductName) installer" />
+
+    <!--
+      No UI sequence is declared at all. The WixToolset.UI extension that
+      provides WixUI_Minimal has to be fetched from a NuGet feed at build time,
+      and an install of one exe, its native sidecars and one Start Menu
+      shortcut does not earn the complexity. With no dialogs the installer runs
+      straight through and Windows shows its own progress bar, which is exactly
+      the right amount of ceremony. EULA.md ships with the source.
+    -->
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="$(ProductName)" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ShortcutFolder" Name="$(ProductName)" />
+    </StandardDirectory>
+
+    <Property Id="ARPPRODUCTICON" Value="WinCare Pro.exe" />
+
+    <Feature Id="Main" Title="$(ProductName)" Level="1">
+      <ComponentGroupRef Id="Payload" />
+      <ComponentGroupRef Id="StartMenu" />
+    </Feature>
+
+    <!--
+      Schedule removal of any older version. Without this, installing 1.1 over
+      1.0 leaves both registered and the Start Menu shows two entries.
+      AllowSameVersionUpgrades is deliberately off: reinstalling the same
+      version is not an upgrade and should not bounce the user.
+    -->
+    <MajorUpgrade AllowSameVersionUpgrades="no"
+                  DowngradeErrorMessage="A newer version of $(ProductName) is already installed." />
+
+    <!--
+      Every file in the publish directory, one component each, harvested by the
+      toolset. Recursive because the SDK has been known to nest native
+      components under a subfolder.
+    -->
+    <ComponentGroup Id="Payload" Directory="INSTALLFOLDER">
+      <Files Include="$(var.SourceDir)\**" />
+    </ComponentGroup>
+
+    <ComponentGroup Id="StartMenu" Directory="ShortcutFolder">
+      <Component Id="StartMenuComponent" Guid="{A1D4E7C2-5B8F-4E3A-9C6D-0F2B8E5A7C41}">
+        <!--
+          Advertise is off. An advertised shortcut makes Windows Installer own
+          the shortcut and register it in the Icon table, which only resolves
+          for a shortcut advertised alongside an Icon file. The app is a single
+          self-contained exe with no shared components, so advertising buys
+          nothing and only adds a build failure.
+
+          Target is a formatted path rather than a File Id reference, because
+          the target file is inside a harvested component whose Id the toolset
+          generates.
+        -->
+        <Shortcut Id="StartMenuShortcut"
+                  Name="$(ProductName)"
+                  Target="[INSTALLFOLDER]WinCare Pro.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Advertise="no" />
+
+        <RemoveFolder Id="RemoveShortcutFolder" Directory="ShortcutFolder" On="uninstall" />
+
+        <!-- Key path, so Windows Installer can repair or relocate the entry. -->
+        <RegistryValue Root="HKCU"
+                       Key="Software\$(Manufacturer)\$(ProductName)"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\$(Manufacturer)\$(ProductName)"
+                       Name="InstallFolder"
+                       Type="string"
+                       Value="[INSTALLFOLDER]" />
+      </Component>
+    </ComponentGroup>
+
+  </Package>
+</Wix>

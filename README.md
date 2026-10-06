@@ -1,18 +1,20 @@
 # WinCare Pro
 
-A system health dashboard for Windows 11. WPF, .NET 8, no installer required
-to try it.
+A system health dashboard for Windows 11. WPF, .NET 8. Ships as a self-contained
+MSI — no .NET runtime required on the target machine.
 
 ## Quick start
 
 ```powershell
-.\build-release.ps1          # build, test, and publish a single self-contained exe
-.\install.ps1                # install for the current user
+.\build-installer.ps1        # tests → publish → MSI → payload verification
+.\install.ps1                # per-user install (legacy script, pre-MSI)
 .\install.ps1 -AutoStart     # ...and start with Windows
 .\install.ps1 -Uninstall     # remove
 ```
 
-`run_test.bat` launches the Release build, building it first if needed.
+`run_test.bat` launches the Release build, building it first if needed. See
+`RELEASE.md` for the full pre-flight checklist and `CHANGELOG.md` for what
+changed.
 
 ## What it does
 
@@ -83,7 +85,7 @@ and privacy toggles all work without it.
 
 ```
 WinCareDesktop.csproj
-App.xaml.cs                 global exception handler
+App.xaml.cs                 single-instance gate, crash handlers, crash-log rotation
 Themes/Theme.xaml           palette, typography, control styles (single source of truth)
 MainWindow.xaml             window shell: header, main column, sidebar, overlay
 MainWindow.xaml.cs          per-region builders that populate the XAML shell
@@ -96,12 +98,23 @@ Services/
   AppxService.cs              Microsoft Store app enumeration and removal
   StorageCleanupService.cs    Recycle Bin, Update cache, DISM, largest folders
   PowerService.cs             stock power plans (enumeration and switching)
+  SingleInstance.cs           named-mutex single-instance guard
+  WindowActivator.cs          foregrounds the existing window on second launch
 ViewModels/MainViewModel.cs  state, commands, scoring
-WinCareDesktop.Tests/        110 xunit tests
+WinCareDesktop.Tests/        113 xunit tests
 Tools/RenderShots/           offscreen PNG renderer (see Screenshots)
+Tools/MakeIcon/              regenerates Assets/WinCarePro.ico
+Assets/                      app icon (.ico + per-size PNGs)
+installer/WinCare.wxs        WiX v5 installer source
+app.manifest                 DPI awareness, asInvoker, long paths
 build-release.ps1            clean → build → test → publish
-install.ps1                  per-user install / uninstall
+build-installer.ps1          tests → publish → MSI → payload verification
+sign-release.ps1             Authenticode signing (env-var cert)
+install.ps1                  per-user install / uninstall (legacy, pre-MSI)
 .github/workflows/ci.yml     the same gate, on every push
+RELEASE.md                   release checklist (signing, installer, legal, known limits)
+CHANGELOG.md                 what changed and when
+LICENSE.md / PRIVACY.md / EULA.md
 ```
 
 ## Styling
@@ -114,7 +127,7 @@ theme, override the palette keys — no C# changes needed.
 ## Tests
 
 ```powershell
-dotnet test WinCareDesktop.Tests                    # all 110
+dotnet test WinCareDesktop.Tests                    # all 113
 dotnet test WinCareDesktop.Tests --filter Category=Ui   # UI only
 ```
 
