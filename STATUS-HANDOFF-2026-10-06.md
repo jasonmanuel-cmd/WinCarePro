@@ -1,29 +1,39 @@
-# WinCare Pro — session handoff (Tue Oct 06 2026, ~00:05)
+# WinCare Pro — session handoff (Tue Oct 06 2026, updated)
 
-## Where we stopped
+## Status: v1.0.0 SHIPPED. Nothing is blocked.
 
-**Completed:**
-- Cipher mode loaded into long-term memory: `C:\Users\blunt\cow\MEMORY.md` (new "🔐 CIPHER MODE" section, v1 Oct 2026).
-- WinCare Pro release prep executed and verified on tonight's build:
-  - `build-release.ps1` — clean build, 0 warnings, **116/116 tests passing**, self-contained `WinCare Pro.exe` (131 MB publish output).
-  - `build-installer.ps1` — WiX 5.0.2, `installer\WinCare.msi` + `cab1.cab` rebuilt; contents verified; MSI unsigned (documented in RELEASE.md §1).
-  - RenderShots pass — `dotnet run --project Tools\RenderShots -c Release -- "$env:TEMP\shots"`; all 12 panel PNGs wrote to `C:\Users\blunt\AppData\Local\Temp\shots`; 11/11 cards define hover styles.
-- Release plumbing committed (`5288cc3`): `release-to-github.ps1`, `packaging\release-github.md`, winget manifest skeleton `packaging\winget\WinCare.WinCarePro.yaml`, `packaging\update-source.sample.txt`.
-- GitHub repo created: https://github.com/jasonmanuel-cmd/WinCarePro (public).
+> This file previously claimed the `git push` was blocked on a PAT lacking
+> `workflow` scope. That was already resolved and the note was never updated.
+> Trust `git status` / `gh` output over this file.
 
-**Blocked:**
-- `git push -u origin master` fails: token lacks `workflow` scope (repo has `.github/workflows/ci.yml`).
-- Attempted non-interactive `gh auth refresh` — could not complete device flow; last attempt is may be sitting dead in a background shell (`sh_1101136d5001t31ifLZ3Q3MugR`, code E472-1735 — treat as expired after interruption).
-- Decision point: user chose option **1** (PAT with `workflow` scope). PAT was not yet pasted — when ready, run: `gh auth login --with-token < <file>` then push. Alternative remains deleting `.github/workflows/ci.yml` and pushing without it.
+## Verified current state
 
-**Outstanding release steps (once push works):**
+- `master` == `origin/master`, clean working tree, no divergence.
+- Remote: https://github.com/jasonmanuel-cmd/WinCarePro (public)
+- Tag `v1.0.0` present; release published and **not** a draft.
+- Release assets (local hashes verified byte-for-byte against GitHub digests):
+  - `WinCare.msi` — 60,489,728 B — `be6cb327…09a0`
+  - `WinCarePro-1.0.0-win-x64.zip` — 60,691,934 B — `2dac4903…2770`
+
+## Known caveats (intentional, documented in RELEASE.md §1)
+
+- MSI is **unsigned**. Expect SmartScreen warnings.
+- `.github/workflows/ci.yml` exists and the token does hold `workflow` scope.
+
+## Gitignore note
+
+`installer/*.zip` is now ignored. It was previously untracked-but-not-ignored,
+which invited committing a 60 MB build artifact. Build output in `installer/`
+is never meant to be tracked — only `installer/WinCare.wxs` is.
+
+## If picking this up again
+
+Do not re-read this file first. Run:
+
 ```powershell
 cd C:\Users\blunt\Desktop\wincare-desktop
-git push -u origin master
-.\release-to-github.ps1 -Version 1.0.0   # tags v1.0.0, creates GH release, MSI + exe zip, prints winget SHA256
+git status --short --branch
+gh release list --repo jasonmanuel-cmd/WinCarePro
 ```
-Then drop `update-source.txt` next to the exe, and submit the three winget manifest files to `microsoft/winget-pkgs` under `manifests/w/WinCare/WinCarePro/1.0.0/` with the SHA256 from the release script output.
 
-**Known shipping caveat:** unsigned MSI/exe → SmartScreen warning on first install. Acceptable for v1.0 freeware; EV cert (~$250–500/yr) before any paid push.
-
-**Other context:** station sync job today had Property Radar export erroring on "out of managed credits"; Oct 2 export still on disk. Harbison-Standard2 perf commit from Oct 5 10:08 left one untracked Lighthouse report artifact in the repo root.
+Those two commands are the source of truth.
