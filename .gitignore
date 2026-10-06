@@ -28,6 +28,7 @@ screenshots/
 installer/*.msi
 installer/*.wixpdb
 installer/*.cab
+installer/*.zip
 installer/obj/
 installer/bin/
 
