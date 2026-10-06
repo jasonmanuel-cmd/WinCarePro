@@ -265,10 +265,10 @@ public class VisualTreeSmokeTests
             var window = new MainWindow();
             DrainDispatcher();
 
-            // TelemetryCard sets MinWidth=150; ModuleCard does not, so this isolates the
+            // TelemetryCard sets MinWidth=160; ModuleCard does not, so this isolates the
             // three metric cards from the seven module rows.
             var cards = Descendants<Border>(window)
-                .Where(b => b.Style != null && b.MinWidth == 150)
+                .Where(b => b.Style != null && b.MinWidth == 160)
                 .ToList();
 
             Assert.Equal(3, cards.Count);
