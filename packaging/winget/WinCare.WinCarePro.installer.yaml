@@ -18,7 +18,7 @@ UpgradeBehavior: install
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/jasonmanuel-cmd/WinCarePro/releases/download/v1.0.0/WinCare.msi
-    InstallerSha256: BE6CB3274A8A7E3FF4692DB0D3A8AFFB011AF08C602E7D386886EA5D69BB09A0
+    InstallerSha256: 4DE72C1BFC55C980814DFF30054D1E3CBD85B9ADC09626854D237A753DA835BC
     ProductCode: '{F0F1AF4E-F698-484E-9989-9C67130C42F7}'
 ManifestType: installer
 ManifestVersion: 1.6.0
