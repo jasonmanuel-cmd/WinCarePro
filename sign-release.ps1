@@ -24,7 +24,10 @@
 [CmdletBinding()]
 param(
     [switch]$SkipTimestamp,
-    [string]$TimestampUrl = 'https://timestamp.digicert.com'
+    # Must be http, not https. DigiCert's RFC 3161 endpoint rejects the TLS
+    # handshake with "Invalid Timestamp URL", which is a confusing failure
+    # because it looks like a signing problem rather than a transport one.
+    [string]$TimestampUrl = 'http://timestamp.digicert.com'
 )
 
 $ErrorActionPreference = 'Stop'
