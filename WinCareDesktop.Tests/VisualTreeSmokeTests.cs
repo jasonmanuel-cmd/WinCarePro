@@ -36,48 +36,9 @@ public class VisualTreeSmokeTests
     /// by a finished thread leave the test host unable to shut down. Actions
     /// are posted to this dispatcher's queue and waited on synchronously.
     /// </summary>
-    private static readonly Lazy<(Thread Thread, Dispatcher Dispatcher)> StaHost = new(() =>
-    {
-        var ready = new ManualResetEventSlim(false);
-        Dispatcher dispatcher = null!;
-        var thread = new Thread(() =>
-        {
-            dispatcher = Dispatcher.CurrentDispatcher;
-            if (Application.Current == null)
-                new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            ready.Set();
-            Dispatcher.Run();
-        })
-        { IsBackground = true, Name = "wincare-ui-tests" };
+    private static void RunSta(Action action) => UiTestHost.Run(action);
 
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        Assert.True(ready.Wait(TimeSpan.FromSeconds(30)), "STA host failed to start");
-        return (thread, dispatcher);
-    });
-
-    private static void RunSta(Action action)
-    {
-        var dispatcher = StaHost.Value.Dispatcher;
-        Exception? failure = null;
-
-        dispatcher.Invoke(() =>
-        {
-            try { action(); }
-            catch (Exception ex) { failure = ex; }
-        }, DispatcherPriority.Normal);
-
-        if (failure != null)
-            throw new Xunit.Sdk.XunitException("UI failure: " + failure);
-    }
-
-    private static void DrainDispatcher()
-    {
-        var dispatcher = StaHost.Value.Dispatcher;
-        // Let queued Dispatcher.Invoke callbacks and layout passes complete.
-        for (var i = 0; i < 3; i++)
-            dispatcher.Invoke(() => { }, DispatcherPriority.Background);
-    }
+    private static void DrainDispatcher() => UiTestHost.Drain();
 
     /// <summary>
     /// Walks the *logical* tree, falling back to the visual tree for elements

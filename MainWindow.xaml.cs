@@ -58,6 +58,15 @@ public MainWindow()
 
             UpdateClock();
             StartTimers();
+
+            // Prime the battery probe before the first paint. UpdateLiveCards
+            // renders "Detecting..." whenever _hasBattery is null, and nothing
+            // else called HasBattery(), so the Power card sat on that
+            // placeholder forever unless the user happened to open the Power
+            // tools panel. The probe itself is a WMI round-trip, so it returns
+            // immediately and completes on a background thread.
+            _ = HasBattery();
+
             UpdateLiveCards();
         }
         catch (Exception ex)
@@ -676,16 +685,23 @@ public MainWindow()
         _hasBattery = null;
         _ = Task.Run(() =>
         {
+            // Default to "no battery" so a failed probe still resolves the card.
+            // A desktop is the overwhelmingly common case, and reporting AC when
+            // we genuinely do not know is closer to the truth than leaving the
+            // placeholder up forever.
+            var found = false;
             try
             {
                 using var mos = new System.Management.ManagementObjectSearcher("SELECT EstimatedChargeRemaining FROM Win32_Battery");
-                var found = mos.Get().Count > 0;
-                Dispatcher.Invoke(() => { _hasBattery = found; UpdateLiveCards(); });
+                found = mos.Get().Count > 0;
             }
             catch
             {
-                Dispatcher.Invoke(() => _hasBattery = false);
+                // WMI can be disabled or slow to start on some machines. The
+                // card must still leave "Detecting...".
             }
+
+            Dispatcher.Invoke(() => { _hasBattery = found; UpdateLiveCards(); });
         });
         return false;
     }
