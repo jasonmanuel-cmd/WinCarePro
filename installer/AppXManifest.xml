@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest for the Microsoft Store build.
+
+  This is deliberately a SEPARATE distribution channel from the MSI, not a
+  replacement. The MSI stays the primary download; this exists so the Store
+  signs the package for us, which is the only way to get an authenticode
+  signature without paying $70-500 a year for a certificate.
+
+  Notes on the parts that are not obvious:
+
+  - runFullTrust is required. WinCare is a WPF desktop app calling Win32
+    APIs directly (powrprof, psapi, EmptyStandbyList). There is no UWP-style
+    sandboxed alternative for that, and full trust is what makes it possible.
+
+  - internetClient is declared ONLY for the opt-in "Check for updates" action,
+    which is a single user-initiated HTTPS GET. It is never called on startup
+    and there is no telemetry. This is spelled out in PRIVACY.md.
+
+  - The Identity Name MUST match the certificate Publisher for sideloading to
+    work at all, and must match the reservation in the Partner Center for Store
+    submission. build-msix.ps1 substitutes both.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="WinCarePro.WinCareDesktop"
+    Publisher="CN=PLACEHOLDER"
+    Version="1.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>WinCare Pro</DisplayName>
+    <PublisherDisplayName>PLACEHOLDER</PublisherDisplayName>
+    <Description>Inspect and clean up your Windows PC. Shows exactly what it will do before it does it, records what you changed, and sends nothing anywhere.</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26200.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="WinCare Pro.exe"
+      EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="WinCare Pro"
+        Description="Inspect and clean up your Windows PC."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\WideLogo.png"
+          Square310x310Logo="Assets\Square150x150Logo.png"
+          Square71x71Logo="Assets\Square71x71Logo.png" />
+        <uap:SplashScreen
+          Image="Assets\SplashScreen.png"
+          BackgroundColor="#0D9488" />
+        <uap:LockScreen BadgeLogo="Assets\LockScreenLogo.png"
+          Notification="badge" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!--
+      runFullTrust is a RESTRICTED capability and must be declared in the rescap
+      namespace. Declaring it as a plain <Capability> fails schema validation
+      with "violates enumeration constraint" and makeappx refuses to build.
+
+      It is required: WinCare is a WPF app calling Win32 APIs directly
+      (powrprof, psapi, EmptyStandbyList). There is no sandboxed equivalent,
+      and this is exactly what the Store submission questionnaire asks about.
+    -->
+    <rescap:Capability Name="runFullTrust" />
+
+    <!--
+      Update check only. See PRIVACY.md - the app makes no network call
+      except the single user-initiated HTTPS GET behind "Check for updates",
+      and no telemetry of any kind.
+    -->
+    <Capability Name="internetClient" />
+  </Capabilities>
+</Package>

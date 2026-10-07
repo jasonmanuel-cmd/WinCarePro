@@ -32,6 +32,15 @@ installer/*.zip
 installer/obj/
 installer/bin/
 
+## MSIX / Microsoft Store build output.
+## AppXManifest.xml IS committed - it is source. AppxAssets\ IS committed - the
+## artwork is generated but versioned. Everything else below is rebuilt by
+## build-msix.ps1 and must not be committed.
+installer/*.msix
+installer/*.msix.cat
+installer/AppXManifest.build.xml
+msix-stage/
+
 ## Editor / OS noise
 .vs/
 .idea/

@@ -29,6 +29,12 @@ internal static class Program
     private static int Main(string[] args)
     {
         var outPath = args.Length > 0 ? args[0] : "WinCarePro.ico";
+        string? assetsDir = null;
+
+        for (var i = 1; i < args.Length; i++)
+        {
+            if (args[i] == "--assets" && i + 1 < args.Length) assetsDir = args[++i];
+        }
 
         // The sizes Windows actually requests. 256 is the PNG-compressed
         // large icon; below that it is BMP.
@@ -37,7 +43,7 @@ internal static class Program
         var images = new List<Bitmap>();
         foreach (var size in sizes)
         {
-            var bmp = Render(size);
+            var bmp = RenderMark(size, 0f);
             images.Add(bmp);
 
             // Each frame is stored as a PNG inside the .ico for sizes >= 64.
@@ -62,10 +68,25 @@ internal static class Program
             foreach (var b in images) b.Dispose();
         }
 
+        if (assetsDir != null)
+        {
+            WriteStoreAssets(assetsDir);
+        }
+
         return 0;
     }
 
-    private static Bitmap Render(int size)
+    /// <summary>
+    /// Draws the mark: a rounded teal plate with a white bolt.
+    /// </summary>
+    /// <param name="size">Canvas edge in pixels. Always square.</param>
+    /// <param name="inset">
+    /// Fraction of the canvas to leave empty on every side. 0 fills the canvas
+    /// edge to edge, which is what taskbar and Alt-Tab want. The Store's
+    /// "Targeted" logos want the mark inset instead, because Windows applies
+    /// its own mask and shadow around it and a full-bleed plate gets clipped.
+    /// </param>
+    private static Bitmap RenderMark(int size, float inset)
     {
         var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
@@ -74,40 +95,207 @@ internal static class Program
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         g.Clear(Color.Transparent);
 
+        var plate = new RectangleF(
+            size * inset, size * inset,
+            size * (1f - 2f * inset), size * (1f - 2f * inset));
+
+        DrawPlate(g, plate);
+        return bmp;
+    }
+
+    /// <summary>
+    /// Fills a rounded gradient plate and draws the bolt centred inside it.
+    /// </summary>
+    private static void DrawPlate(Graphics g, RectangleF plate)
+    {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
         // Rounded square plate. The corner radius is a fraction of the size so
         // it looks the same at 16px and at 256px.
-        var radius = size * 0.22f;
-        var plate = new RectangleF(0, 0, size, size);
+        var radius = plate.Width * 0.22f;
 
         using (var path = RoundedRect(plate, radius))
         {
-            using var brush = new LinearGradientBrush(
-                new RectangleF(0, 0, size, size), Brand, BrandDeep, 55f);
+            using var brush = new LinearGradientBrush(plate, Brand, BrandDeep, 55f);
             g.FillPath(brush, path);
         }
 
-        // Bolt, drawn as a filled polygon so it scales without blurring.
-        using (var bolt = new GraphicsPath())
+        DrawBolt(g, plate);
+    }
+
+    /// <summary>
+    /// The bolt polygon, drawn as a filled path so it scales without blurring.
+    /// </summary>
+    private static void DrawBolt(Graphics g, RectangleF plate)
+    {
+        var pts = new[]
         {
-            var pts = new[]
-            {
-                new PointF(0.56f, 0.13f),
-                new PointF(0.30f, 0.55f),
-                new PointF(0.47f, 0.55f),
-                new PointF(0.42f, 0.88f),
-                new PointF(0.72f, 0.44f),
-                new PointF(0.54f, 0.44f),
-            };
-            bolt.AddPolygon(Scale(pts, size));
-            using var fill = new SolidBrush(Color.White);
-            g.FillPath(fill, bolt);
-        }
+            new PointF(0.56f, 0.13f),
+            new PointF(0.30f, 0.55f),
+            new PointF(0.47f, 0.55f),
+            new PointF(0.42f, 0.88f),
+            new PointF(0.72f, 0.44f),
+            new PointF(0.54f, 0.44f),
+        };
+
+        var scaled = pts
+            .Select(p => new PointF(
+                plate.X + p.X * plate.Width,
+                plate.Y + p.Y * plate.Height))
+            .ToArray();
+
+        using var bolt = new GraphicsPath();
+        bolt.AddPolygon(scaled);
+        using var fill = new SolidBrush(Color.White);
+        g.FillPath(fill, bolt);
+    }
+
+    /// <summary>
+    /// Emits the artwork shapes the Microsoft Store requires inside the MSIX
+    /// package.
+    /// </summary>
+    /// <remarks>
+    /// Store validates asset names and dimensions at submission time, so these
+    /// are generated rather than hand-drawn: getting one dimension wrong is a
+    /// rejected submission, and there is no useful error message for it.
+    /// </remarks>
+    private static void WriteStoreAssets(string dir)
+    {
+        Directory.CreateDirectory(dir);
+
+        // Full-bleed squares. Windows does not mask these, so the plate runs to
+        // the canvas edge exactly as the taskbar icon does.
+        void Square(string name, int size) =>
+            Save(RenderMark(size, 0f), Path.Combine(dir, name));
+
+        // "Targeted" squares. Windows draws its own rounded mask and drop shadow
+        // around these, so the mark is inset and the outside is transparent.
+        // Full bleed here produces a plate with a visible second border.
+        void Targeted(string name, int size) =>
+            Save(RenderMark(size, 0.14f), Path.Combine(dir, name));
+
+        Square("Square44x44Logo.png", 44);
+        Square("Square71x71Logo.png", 71);
+        Square("Square150x150Logo.png", 150);
+        Square("StoreLogo.png", 50);
+        Square("LockScreenLogo.png", 24);
+
+        Targeted("Square44x44LogoTargeted.png", 44);
+        Targeted("Square71x71LogoTargeted.png", 71);
+        Targeted("Square150x150LogoTargeted.png", 150);
+
+        Save(RenderWideLogo(), Path.Combine(dir, "WideLogo.png"));
+        Save(RenderSplash(), Path.Combine(dir, "SplashScreen.png"));
+
+        Console.WriteLine($"Wrote {Directory.GetFiles(dir).Length} Store asset(s) to {dir}");
+    }
+
+    /// <summary>
+    /// 310x150 transparent banner: mark on the left, wordmark beside it.
+    /// </summary>
+    private static Bitmap RenderWideLogo()
+    {
+        const int w = 310, h = 150;
+        var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        g.Clear(Color.Transparent);
+
+        var mark = 76f;
+        var plate = new RectangleF(18, (h - mark) / 2f, mark, mark);
+        DrawPlate(g, plate);
+
+        using var font = new Font("Segoe UI Semibold", 30f, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(Color.FromArgb(0x0F, 0x17, 0x2A));
+
+        // Centred in the space to the right of the mark, not at a fixed offset.
+        // A fixed offset pushed the wordmark off the canvas once the measured
+        // string was wider than the remaining room.
+        using var centred = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center
+        };
+        g.DrawString("WinCare Pro", font, brush,
+            new RectangleF(18 + mark + 8, 0, w - (18 + mark + 8) - 8, h), centred);
 
         return bmp;
     }
 
-    private static PointF[] Scale(PointF[] points, int size) =>
-        points.Select(p => new PointF(p.X * size, p.Y * size)).ToArray();
+    /// <summary>
+    /// 620x300 launch image.
+    /// </summary>
+    /// <remarks>
+    /// Opaque brand fill rather than transparency. The splash is composited by
+    /// the shell on backgrounds this app cannot know in advance, and a
+    /// transparent one either vanishes or turns into dark-grey-on-dark on a
+    /// dark-theme machine.
+    /// </remarks>
+    private static Bitmap RenderSplash()
+    {
+        const int w = 620, h = 300;
+        var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        g.Clear(Color.Transparent);
+
+        using (var bg = new LinearGradientBrush(
+                   new RectangleF(0, 0, w, h), Brand, BrandDeep, 60f))
+        {
+            g.FillRectangle(bg, 0, 0, w, h);
+        }
+
+        var mark = 104f;
+        var plate = new RectangleF((w - mark) / 2f, (h - mark) / 2f - 26, mark, mark);
+
+        // The plate is white on brand teal here, so invert it: a white plate
+        // carrying a brand-coloured bolt, which reads at a glance on launch.
+        using (var path = RoundedRect(plate, mark * 0.22f))
+        using (var fill = new SolidBrush(Color.White))
+        {
+            g.FillPath(fill, path);
+        }
+
+        var pts = new[]
+        {
+            new PointF(0.56f, 0.13f), new PointF(0.30f, 0.55f),
+            new PointF(0.47f, 0.55f), new PointF(0.42f, 0.88f),
+            new PointF(0.72f, 0.44f), new PointF(0.54f, 0.44f),
+        };
+        var scaled = pts
+            .Select(p => new PointF(
+                plate.X + p.X * plate.Width, plate.Y + p.Y * plate.Height))
+            .ToArray();
+        using (var bolt = new GraphicsPath())
+        using (var fill = new SolidBrush(Color.FromArgb(0x0F, 0x76, 0x6E)))
+        {
+            bolt.AddPolygon(scaled);
+            g.FillPath(fill, bolt);
+        }
+
+        using var font = new Font("Segoe UI Semibold", 30f, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var text = new SolidBrush(Color.White);
+
+        // Centre across the full canvas width. Passing a PointF to DrawString
+        // with GenericTypographic anchors the text at that point instead, which
+        // put the wordmark flush against the left edge and clipped it.
+        using var centred = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Near
+        };
+        g.DrawString("WinCare Pro", font, text,
+            new RectangleF(0, plate.Bottom + 20, w, 44f), centred);
+
+        return bmp;
+    }
+
+    private static void Save(Bitmap bmp, string path)
+    {
+        using (bmp) bmp.Save(path, ImageFormat.Png);
+    }
 
     private static GraphicsPath RoundedRect(RectangleF r, float radius)
     {

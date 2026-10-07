@@ -13,15 +13,51 @@ public class ProcessExecutionTests
 {
     private readonly SystemOptimizerService _svc = new();
 
+    /// <summary>
+    /// Number of write calls and characters per call.
+    /// </summary>
+    /// <remarks>
+    /// The pipe buffer is 4-64KB depending on the pipe, so 300KB is
+    /// comfortably past it on any machine. What matters to these tests is only
+    /// that the child blocks on a full pipe until the parent drains it, which
+    /// 300KB guarantees. More volume buys nothing and costs wall-clock time,
+    /// and wall-clock time is what made these tests flaky.
+    /// </remarks>
+    private const int PayloadWrites = 6000;
+    private const int PayloadChars = 50;
+
+    /// <summary>
+    /// Budget for a child that takes about 2s to produce its output.
+    /// </summary>
+    /// <remarks>
+    /// These were previously 30s against a child that took 5.6s to start
+    /// producing anything. xUnit runs test collections in parallel, so three
+    /// of these plus a 40s Appx enumeration were collectively exhausting the
+    /// old budget and timing out, which made the suite fail intermittently for
+    /// reasons that had nothing to do with the code under test. A tighter,
+    /// genuinely fast child means the tests now either pass or reveal a real
+    /// regression.
+    /// </remarks>
+    private const int TimeoutMs = 15_000;
+
+    /// <summary>
+    /// Writes <see cref="PayloadWrites"/> chunks straight to the console rather
+    /// than building a string first, so the parent has to drain the pipe while
+    /// the child is still producing. That is the deadlock these tests exist to
+    /// pin.
+    /// </summary>
+    private static string PayloadCommand(string channel) =>
+        $"-NoProfile -Command \"1..{PayloadWrites} | ForEach-Object "
+        + $"{{ [Console]::{channel}.Write(('x' * {PayloadChars})) }}\"";
+
     [Fact]
     public void Large_stdout_does_not_deadlock()
     {
         // Far beyond the pipe buffer, so the old implementation would hang.
-        var (_, stdout, _) = _svc.RunProcessPublic(
-            "powershell",
-            "-NoProfile -Command \"1..20000 | ForEach-Object { 'x' * 40 }\"",
-            30000);
+        var (code, stdout, _) =
+            _svc.RunProcessPublic("powershell", PayloadCommand("Out"), TimeoutMs);
 
+        Assert.Equal(0, code);
         Assert.True(stdout.Length > 100_000,
             $"expected a large payload, got {stdout.Length} chars");
     }
@@ -29,11 +65,10 @@ public class ProcessExecutionTests
     [Fact]
     public void Large_stderr_does_not_deadlock()
     {
-        var (_, _, stderr) = _svc.RunProcessPublic(
-            "powershell",
-            "-NoProfile -Command \"1..20000 | ForEach-Object { [Console]::Error.WriteLine('e' * 40) }\"",
-            30000);
+        var (code, _, stderr) =
+            _svc.RunProcessPublic("powershell", PayloadCommand("Error"), TimeoutMs);
 
+        Assert.Equal(0, code);
         Assert.True(stderr.Length > 100_000,
             $"expected a large stderr payload, got {stderr.Length} chars");
     }
@@ -41,14 +76,23 @@ public class ProcessExecutionTests
     [Fact]
     public void Large_output_on_both_pipes_simultaneously_does_not_deadlock()
     {
-        var (code, stdout, stderr) = _svc.RunProcessPublic(
-            "powershell",
-            "-NoProfile -Command \"1..20000 | ForEach-Object { 'o' * 20; [Console]::Error.WriteLine('e' * 20) }\"",
-            30000);
+        // Both pipes filled at once is the case the old ordering really broke on:
+        // a child blocked writing to stderr can never reach the parent's stdout
+        // read, and neither read completes. Writing both inside one loop body
+        // matters - two separate statements would not interleave the writes
+        // and would not reproduce the deadlock.
+        var both =
+            $"-NoProfile -Command \"1..{PayloadWrites} | ForEach-Object "
+            + $"{{ [Console]::Out.Write(('o' * {PayloadChars})); "
+            + $"[Console]::Error.Write(('e' * {PayloadChars})) }}\"";
+
+        var (code, stdout, stderr) = _svc.RunProcessPublic("powershell", both, TimeoutMs);
 
         Assert.Equal(0, code);
-        Assert.True(stdout.Length > 50_000);
-        Assert.True(stderr.Length > 50_000);
+        Assert.True(stdout.Length > 100_000,
+            $"expected a large stdout payload, got {stdout.Length} chars");
+        Assert.True(stderr.Length > 100_000,
+            $"expected a large stderr payload, got {stderr.Length} chars");
     }
 
     [Fact]
