@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -363,10 +364,16 @@ public MainWindow()
 
     private void BuildTelemetryRow()
     {
-        var wrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        wrap.Children.Add(MakeTelCard("\U0001F4C2", "RAM Usage", _ramVal, _ramSub, RamCard_Click));
-        wrap.Children.Add(MakeTelCard("\U0001F4A1", "Storage", _storageVal, _storageSub, StorageCard_Click));
-        wrap.Children.Add(MakeTelCard("\U0001F50B", "Power", _powerVal, _powerSub, PowerCard_Click));
+        var wrap = new Grid();
+        wrap.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        wrap.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        wrap.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var card0 = MakeTelCard("\U0001F4C2", "RAM Usage", _ramVal, _ramSub, RamCard_Click);
+        var card1 = MakeTelCard("\U0001F4A1", "Storage", _storageVal, _storageSub, StorageCard_Click);
+        var card2 = MakeTelCard("\U0001F50B", "Power", _powerVal, _powerSub, PowerCard_Click);
+        wrap.Children.Add(card0); Grid.SetColumn(card0, 0);
+        wrap.Children.Add(card1); Grid.SetColumn(card1, 1);
+        wrap.Children.Add(card2); Grid.SetColumn(card2, 2);
 
         // Telemetry cards and the module list share row 2, so they need their
         // own stacked rows. Adding both to one bare Grid put them in the same
@@ -587,6 +594,16 @@ public MainWindow()
             ItemsSource = VM.Logs,
             ItemContainerStyle = (Style)FindResource("FlatListItem")
         };
+        // Wrap long log lines instead of clipping them mid-word.
+        var logTpl = new DataTemplate();
+        var factory = new FrameworkElementFactory(typeof(TextBlock));
+        factory.SetBinding(TextBlock.TextProperty, new Binding());
+        factory.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+        factory.SetValue(TextBlock.FontFamilyProperty, MonoFont);
+        factory.SetValue(TextBlock.FontSizeProperty, 11.0);
+        factory.SetValue(TextBlock.ForegroundProperty, TextSecondary);
+        logTpl.VisualTree = factory;
+        _logList.ItemTemplate = logTpl;
         _logList.SetBinding(ScrollViewer.HorizontalScrollBarVisibilityProperty,
             new Binding { Source = ScrollBarVisibility.Disabled });
 
@@ -752,8 +769,15 @@ public MainWindow()
 
     private Border MakeModuleCard(string icon, string name, string desc, MouseButtonEventHandler click)
     {
-        var c = new Border { Style = (Style)FindResource("ModuleCard") };
+        var c = new Border { Style = (Style)FindResource("ModuleCard"), Focusable = true };
         if (click != null) c.MouseLeftButtonUp += click;
+        // Keyboard access: Enter/Space on a focused card should open the same panel.
+        c.KeyDown += (s, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space) { click?.Invoke(s, new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)); e.Handled = true; }
+        };
+        // Screen reader access: the card's visible name becomes its automation name.
+        AutomationProperties.SetName(c, name);
 
         var gp = new Grid();
         gp.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
@@ -802,8 +826,18 @@ public MainWindow()
 
     private Border MakeTelCard(string icon, string title, TextBlock valRef, TextBlock subRef, MouseButtonEventHandler click)
     {
-        var c = new Border { Style = (Style)FindResource("TelemetryCard") };
+        var c = new Border { Style = (Style)FindResource("TelemetryCard"), Focusable = true };
         if (click != null) c.MouseLeftButtonUp += click;
+        c.KeyDown += (s, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space)
+            {
+                click?.Invoke(s, new MouseButtonEventArgs(
+                    Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left));
+                e.Handled = true;
+            }
+        };
+        AutomationProperties.SetName(c, title);
 
         var gp = new Grid();
         gp.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -870,15 +904,35 @@ public MainWindow()
         // and combined with the panel padding it left less room than the content
         // needed, so the heading and the close button were clipped away.
         var sp = new StackPanel();
-        sp.Children.Add(new TextBlock
+        var titleRow = new Grid { Margin = new Thickness(0, 0, 0, 16) };
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        titleRow.Children.Add(new TextBlock
         {
             Text = title,
             FontSize = 22,
             FontWeight = FontWeights.SemiBold,
             Foreground = TextPrimary,
-            FontFamily = SansFont,
-            Margin = new Thickness(0, 0, 0, 16)
+            FontFamily = SansFont
         });
+        // Pinned close in the header. The previous close button sat at the very
+        // bottom of the scroll, so on long panels (RAM, Storage, Uninstall) the
+        // only way out was to scroll the entire list first.
+        var headerClose = new Button
+        {
+            Content = "\u2715",
+            Padding = new Thickness(10, 6, 10, 6),
+            Background = SurfaceHover,
+            Foreground = TextSecondary,
+            BorderBrush = Hairline,
+            BorderThickness = new Thickness(1),
+            Cursor = Cursors.Hand
+        };
+        AutomationProperties.SetName(headerClose, "Close panel");
+        headerClose.Click += (s, t) => HideSub();
+        Grid.SetColumn(headerClose, 1);
+        titleRow.Children.Add(headerClose);
+        sp.Children.Add(titleRow);
         if (content != null) sp.Children.Add(content);
         var closeBtn = new Button
         {
@@ -901,7 +955,7 @@ public MainWindow()
         // Scroll rather than clip. Several panels list variable-length content,
         // and a tall list used to push the heading and the close button out of
         // the panel entirely, leaving no way out of the sub-screen.
-        SubScreenOverlay.Child = new Border
+        var panelHost = new Border
         {
             Background = Surface,
             CornerRadius = new CornerRadius(12),
@@ -921,16 +975,53 @@ public MainWindow()
                 Content = sp
             }
         };
+        SubScreenOverlay.Child = panelHost;
         SubScreenOverlay.Visibility = Visibility.Visible;
         SubScreenOverlay.Opacity = 0;
         var anim = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150));
         SubScreenOverlay.BeginAnimation(OpacityProperty, anim);
+
+        // Esc closes the panel. Handled at the window in the Preview phase
+        // because the overlay is a Border and does not receive key events until
+        // something inside it holds focus.
+        PreviewKeyDown -= OnPreviewKeyDown;
+        PreviewKeyDown += OnPreviewKeyDown;
+
+        // Cycle focus inside the panel so Tab cannot walk out into the
+        // dashboard behind the overlay.
+        KeyboardNavigation.SetTabNavigation(panelHost, KeyboardNavigationMode.Cycle);
+        KeyboardNavigation.SetTabNavigation(sp, KeyboardNavigationMode.Cycle);
+
+        // Land keyboard focus on the header close button rather than nowhere.
+        SubScreenOverlay.Dispatcher.BeginInvoke(
+            DispatcherPriority.Input, new Action(() => headerClose.Focus()));
+    }
+
+    /// <summary>
+    /// Closes an open sub-screen on Esc, and swallows Escape for the window when
+    /// no panel is open so it does nothing surprising.
+    /// </summary>
+    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (SubScreenOverlay.Visibility != Visibility.Visible) return;
+        if (e.Key != Key.Escape) return;
+        HideSub();
+        e.Handled = true;
     }
 
     private void HideSub()
     {
         SubScreenOverlay.Visibility = Visibility.Collapsed;
         SubScreenOverlay.Opacity = 1;
+
+        // Detach the Esc handler so it stops intercepting keys once no panel is
+        // open. Leaving it attached meant every future Escape was swallowed.
+        PreviewKeyDown -= OnPreviewKeyDown;
+
+        // Return focus to the dashboard rather than dropping it, otherwise
+        // keyboard focus falls back to the window and Tab order starts from the
+        // top of the visual tree again.
+        if (MainColumn.IsEnabled) MainColumn.Focus();
     }
 
     private Button MakeActionButton(string text, Brush accent, RoutedEventHandler onClick)
@@ -1171,7 +1262,7 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
         Row("Disk", $"{VM.StoragePercent:F0}% used · {VM.FreeStorageGb:F0} GB free");
         Row("Uptime", VM.UptimeText);
         Row("Disk health", VM.DiskHealthText);
-        Row("Privacy shields", $"{VM.TrackersBlocked} of {VM.Shields.Count} on");
+        Row("Privacy shields", $"{VM.TrackersBlocked} of {VM.Shields.Count} blocked");
         Row("Reclaimed", $"{VM.ReclaimedGb:F2} GB this session");
 
         sp.Children.Add(new TextBlock
@@ -1307,7 +1398,7 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
     }
 
     private void PrivacyShield_Click(object s, MouseButtonEventArgs e) => ShowPrivacyShield();
-    private void ShowPrivacyShield() => ShowSub("Privacy Shield & Telemetry", BuildPrivacyShieldContent());
+    private void ShowPrivacyShield() => ShowSub("Privacy Shield", BuildPrivacyShieldContent());
 
     private FrameworkElement BuildPrivacyShieldContent()
     {
@@ -1346,7 +1437,7 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
             });
             var status = new TextBlock
             {
-                Text = shield.Enabled ? "\u25cf ON" : "\u25cb OFF",
+                Text = shield.Enabled ? "● BLOCKED" : "○ ALLOWED",
                 FontSize = 12,
                 FontWeight = FontWeights.Bold,
                 FontFamily = MonoFont,
@@ -1371,7 +1462,7 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
         VM.LoadBloatwareCommand.Execute(null);
         ShowBloatware();
     }
-    private void ShowBloatware() => ShowSub("Unused Apps Remover", BuildBloatwareContent());
+    private void ShowBloatware() => ShowSub("Removable Apps", BuildBloatwareContent());
 
     private FrameworkElement BuildBloatwareContent()
     {
@@ -1477,7 +1568,7 @@ private async Task OnOptimizeClick(IReadOnlyList<CleanupCandidate>? candidates)
     }
 
     private void UndoCenter_Click(object s, MouseButtonEventArgs e) => ShowUndoHistory();
-    private void ShowUndoHistory() => ShowSub("Undo History", BuildUndoHistoryContent());
+    private void ShowUndoHistory() => ShowSub("History & Undo", BuildUndoHistoryContent());
 
     private FrameworkElement BuildUndoHistoryContent()
     {

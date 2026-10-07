@@ -390,7 +390,8 @@ public partial class MainWindow
                 Primary,
                 () => Task.Run(() =>
                 {
-                    var ok = VM.Service.TrimProcessWorkingSet(proc.Pid);
+                    var svc = VM.Service; // capture on UI thread before Task.Run
+                    var ok = svc.TrimProcessWorkingSet(proc.Pid);
                     return ok
                         ? $"Trimmed {proc.Name}'s working set. It will fault pages back in as it needs them."
                         : $"!Could not trim {proc.Name} — it may be protected or already exited.";
@@ -407,9 +408,10 @@ public partial class MainWindow
             Primary,
             () => Task.Run(() =>
             {
+                var svc = VM.Service;
                 if (NativeMethods.TryEmptyStandbyList())
                 {
-                    var after = VM.Service.GetStandbyMemoryBytes();
+                    var after = svc.GetStandbyMemoryBytes();
                     return after >= 0
                         ? $"Standby list emptied. It now holds {FormatBytes(after)}."
                         : "Standby list emptied.";
@@ -425,7 +427,8 @@ public partial class MainWindow
             Primary,
             () => Task.Run(() =>
             {
-                VM.Service.FlushDnsCache();
+                var svc = VM.Service;
+                svc.FlushDnsCache();
                 return "DNS resolver cache flushed.";
             })));
 
@@ -565,17 +568,18 @@ public partial class MainWindow
                 Primary,
                 () => Task.Run(() =>
                 {
+                    var previous = _power.GetPowerPlans().FirstOrDefault(x => x.Active)?.Name ?? "";
                     var (ok, message) = _power.SetPowerPlan(p.Guid);
                     if (!ok) return "!" + message;
 
-                    var previous = _power.GetPowerPlans().FirstOrDefault(x => x.Active)?.Name ?? "";
-                    VM.Service.PushUndoTransaction(new OptimizationTransaction
+                    var svc = VM.Service;
+                    svc.PushUndoTransaction(new OptimizationTransaction
                     {
                         Title = $"Power plan changed to {p.Name}",
                         Description = $"Previously: {(previous.Length == 0 ? "unknown" : previous)}",
                         Kind = UndoKind.DisplayOnly
                     });
-                    ShowSub("Power tools", BuildPowerToolkit());
+                    Dispatcher.Invoke(() => ShowSub("Power tools", BuildPowerToolkit()));
                     return $"Power plan switched to {p.Name}.";
                 }),
                 destructive: false));
@@ -887,15 +891,17 @@ public partial class MainWindow
         });
 
         var run = MakeFlatButton("Run the uninstaller", ErrorBrush);
-        run.Click += (_, _) =>
+        run.Click += async (_, _) =>
         {
             run.IsEnabled = false;
             run.Content = "Launching…";
             try
             {
-                var (code, _, stderr) = VM.Service.RunProcessPublic(file, args, 600_000);
+                var svc = VM.Service;
+                var (code, _, stderr) = await Task.Run(() =>
+                    svc.RunProcessPublic(file, args, 600_000));
 
-                VM.Service.PushUndoTransaction(new OptimizationTransaction
+                svc.PushUndoTransaction(new OptimizationTransaction
                 {
                     Title = $"Uninstalled {program.Name}",
                     Description = $"Ran {Path.GetFileName(file)}. " +

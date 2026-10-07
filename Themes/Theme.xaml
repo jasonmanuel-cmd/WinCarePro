@@ -16,8 +16,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- ── Palette ──────────────────────────────────────────────────── -->
-    <Color x:Key="PrimaryColor">#0D9488</Color>
-    <Color x:Key="PrimaryDarkColor">#0A7C72</Color>
+    <Color x:Key="PrimaryColor">#0F766E</Color>
+    <Color x:Key="PrimaryDarkColor">#115E59</Color>
     <Color x:Key="PrimaryLightColor">#CCFBF0</Color>
 
     <SolidColorBrush x:Key="BgBrush"        Color="#EEF2F7" />
@@ -28,11 +28,18 @@
     <SolidColorBrush x:Key="PrimaryLight"   Color="{DynamicResource PrimaryLightColor}" />
     <SolidColorBrush x:Key="TextPrimary"    Color="#0F172A" />
     <SolidColorBrush x:Key="TextSecondary"  Color="#475569" />
-    <SolidColorBrush x:Key="TextTertiary"   Color="#94A3AF" />
+    <!--
+        TextTertiary carries captions, sizes and hints, which sit on BgBrush as
+        often as on white. #64748B passes on white (4.76) but fails on BgBrush
+        (4.23), so this is darker: 4.84 on BgBrush, 5.44 on white. The audit
+        suggested #64748B; that only fixes half the surfaces where the colour is
+        actually used.
+    -->
+    <SolidColorBrush x:Key="TextTertiary"   Color="#5B6B80" />
     <SolidColorBrush x:Key="Hairline"       Color="#E2E8F0" />
-    <SolidColorBrush x:Key="Success"        Color="#10B981" />
-    <SolidColorBrush x:Key="Warning"        Color="#F59E0B" />
-    <SolidColorBrush x:Key="Error"          Color="#EF4444" />
+    <SolidColorBrush x:Key="Success"        Color="#047857" />
+    <SolidColorBrush x:Key="Warning"        Color="#B45309" />
+    <SolidColorBrush x:Key="Error"          Color="#DC2626" />
 
     <FontFamily x:Key="SansFont">Segoe UI, Helvetica Neue, Arial, sans-serif</FontFamily>
     <!-- Tabular figures so numbers do not jitter as they update. -->
@@ -78,6 +85,22 @@
     </Style>
 
     <!-- ── Surfaces ─────────────────────────────────────────────────── -->
+    <!-- Focus ring for the card styles below. The OS default is a dotted
+         rectangle that vanishes against a white surface. -->
+    <Style x:Key="CardFocusVisual" TargetType="Control">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="2"
+                               Stroke="{DynamicResource Primary}"
+                               StrokeThickness="2"
+                               StrokeDashArray="2 2"
+                               SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Card" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
@@ -117,6 +140,29 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="12,8,12,8" />
         <Setter Property="Cursor" Value="Hand" />
+        <!--
+            The default WPF focus visual is a dotted rectangle drawn by the OS
+            and it disappears entirely against a white card. This draws a
+            2px primary outline with a 2px gap instead, so keyboard focus is
+            always visible.
+        -->
+        <Setter Property="FocusVisualStyle">
+            <Setter.Value>
+                <Style TargetType="Control">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate>
+                                <Rectangle Margin="3"
+                                           Stroke="{DynamicResource Primary}"
+                                           StrokeThickness="2"
+                                           StrokeDashArray="2 2"
+                                           SnapsToDevicePixels="True" />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -192,12 +238,19 @@
         <Setter Property="MinWidth" Value="160" />
         <Setter Property="Margin" Value="0,0,12,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource CardFocusVisual}" />
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.06" Color="#000000" />
             </Setter.Value>
         </Setter>
         <Style.Triggers>
+            <!-- Keyboard focus gets the same primary border the mouse gets, so
+                 the two interaction modes never look different. -->
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
@@ -218,12 +271,17 @@
         <Setter Property="Padding" Value="16,14,16,14" />
         <Setter Property="Margin" Value="0,0,0,10" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource CardFocusVisual}" />
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.06" Color="#000000" />
             </Setter.Value>
         </Setter>
         <Style.Triggers>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />

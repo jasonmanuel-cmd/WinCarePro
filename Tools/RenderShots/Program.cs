@@ -424,10 +424,10 @@ internal static class Program
         "02-maintenance-preview" => "Maintenance Preview",
         "03-diagnostics" => "Diagnostics",
         "04-system-check" => "System Check",
-        "05-privacy-shield" => "Privacy Shield & Telemetry",
-        "06-removable-apps" => "Unused Apps Remover",
+        "05-privacy-shield" => "Privacy Shield",
+        "06-removable-apps" => "Removable Apps",
         "07-ram-network" => "RAM & Network",
-        "08-history-undo" => "Undo History",
+        "08-history-undo" => "History & Undo",
         _ => shot
     };
     /// <summary>

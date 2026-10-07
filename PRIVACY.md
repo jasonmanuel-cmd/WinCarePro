@@ -5,7 +5,8 @@
 ## The short version
 
 WinCare Pro does not collect, transmit, sell or share any data. It has no
-network code at all. Everything it knows stays on your computer.
+network code except an explicit, user-initiated update check. Everything it
+knows stays on your computer unless you manually check for updates.
 
 ## What the app stores
 
@@ -41,13 +42,13 @@ folders named in the app.
 ## What leaves your computer
 
 Nothing, by default. There is no analytics, no crash reporting service, no
-automatic update check, no telemetry, no advertising identifier, and no
-outbound connection of any kind.
+automatic update check, no telemetry, no advertising identifier.
 
 The **only** network call the app can make is a manual “Check for updates”
-action. It sends one HTTPS GET to a version manifest you would point it at, and
-it is never triggered on startup or in the background. Removing the network
-code would not change any other behaviour.
+action from the Diagnostics panel. It sends one HTTPS GET to a version
+manifest you would point at via `update-source.txt`, and it is never
+triggered on startup or in the background. Removing the network code would
+not change any other behaviour.
 
 If a crash happens, the details are written to `crash.log` on your machine. They
 are only shared if you personally choose to send them to whoever is supporting

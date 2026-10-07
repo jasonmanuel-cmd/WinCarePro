@@ -337,7 +337,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void RevertTransaction(OptimizationTransaction? tx)
+    private async Task RevertTransaction(OptimizationTransaction? tx)
     {
         if (tx == null) return;
 
@@ -345,7 +345,7 @@ public partial class MainViewModel : ObservableObject
         {
             // Previously this silently rewrote the displayed numbers and logged
             // "Reverted", implying files came back. They cannot. Be explicit.
-            LastRevertMessage = "This action deleted files and cannot be undone. " +
+            LastRevertMessage = "This action was recorded for history only and cannot be reversed. " +
                                 "Only the recorded score history was rolled back.";
             UndoHistory.Remove(tx);
             _svc.RemoveUndoTransaction(tx);
@@ -354,11 +354,11 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var (ok, message) = Task.Run(() =>
+        var (ok, message) = await Task.Run(() =>
         {
             var (success, msg) = (_svc.TryRevert(tx, out var m), m);
             return (success, msg);
-        }).GetAwaiter().GetResult();
+        });
 
         LastRevertMessage = message;
 
