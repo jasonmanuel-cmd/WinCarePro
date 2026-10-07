@@ -41,6 +41,12 @@ installer/*.msix.cat
 installer/AppXManifest.build.xml
 msix-stage/
 
+## Undo the blanket *.png rule for the Store artwork only. A broad *.png rule
+## exists elsewhere in this file, and without this the AppxAssets the manifest
+## references would be missing from a fresh clone - which fails makeappx
+## validation at pack time.
+!installer/AppxAssets/*.png
+
 ## Editor / OS noise
 .vs/
 .idea/
