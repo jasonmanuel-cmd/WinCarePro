@@ -28,7 +28,8 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
-    [string]$Version
+    [string]$Version,
+    [switch]$SkipTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -149,7 +150,7 @@ $signtool = Get-ChildItem $sdkPkg -Recurse -Filter 'signtool.exe' -ErrorAction S
 
 if (-not $signtool) { throw 'signtool.exe not found; cannot sign the MSIX.' }
 
-$certName = 'CN=' + $publisherDisplay + ' MSIX'
+$certName = $publisher
 
 # Prefer a real certificate if one is supplied. That is the only signature a
 # customer's machine will trust.
@@ -175,9 +176,8 @@ if (-not $usingRealCert) {
         Write-Host "    reusing self-signed cert ($($cert.Thumbprint.Substring(0, 12))...)" -ForegroundColor DarkGray
     }
     $pfxPath = Join-Path $env:TEMP 'wincare-msix-test.pfx'
-    if (-not (Test-Path $pfxPath)) {
-        Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pw -ChainOption EndEntityCertOnly | Out-Null
-    }
+    $pw = ConvertTo-SecureString -String 'wincare' -Force -AsPlainText
+    Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pw -ChainOption EndEntityCertOnly -Force | Out-Null
     $pfxPassword = 'wincare'
 }
 

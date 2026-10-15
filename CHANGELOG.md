@@ -4,7 +4,25 @@ All notable changes to WinCare Pro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 semantic versioning.
 
-## [Unreleased]
+## [2.0.0] - 2026-10-14
+
+Complete architectural overhaul and transition to a modern modular MVVM desktop experience.
+
+### Added
+- **Modern Navigation Shell & MVVM Core**: Re-architected application shell powered by CommunityToolkit.Mvvm featuring a responsive sidebar and dynamic view switching.
+- **Deep Disk Space Analyzer**: Visual directory scanner with recursive folder sizing, drill-down capabilities, and proportional capacity bars (DiskAnalyzerView).
+- **Interactive Startup Apps Manager**: Inspect startup applications from registry and startup folders with calculated boot impact ratings and one-click toggle controls (StartupManagerView).
+- **Unified App Uninstaller**: Multi-select uninstallation for standard Win32 programs and Windows Store (Appx/MSIX) packages, featuring silent-uninstall detection and safety checks (AppUninstallView).
+- **Network & DNS Monitor**: Real-time network interface throughput, ping latency tester, DNS cache flush, and quick-switching between privacy-first DNS providers (Cloudflare, Google, Quad9) (NetworkMonitorView).
+- **Auto-Tune Scheduler**: Automated background maintenance scheduler for routine system cache and temp cleanups (SchedulerView).
+- **Optimization Undo & Event Log**: Interactive audit log and snapshot reversibility manager (HistoryLogsView).
+- **Test Suite**: Expanded automated unit and UI visual tree smoke tests to 134 passing tests covering all views, models, and services.
+- **History Store**: Exposed public MaxHistoryEntries property for configuration inspection.
+
+### Changed
+- Refactored monolithic MainWindow.xaml.cs and MainWindow.Tools.cs into modular UserControls and dedicated ViewModels under Views/ and ViewModels/.
+- Decomposed background operations into dedicated services (DiskAnalyzerService, StartupManagerService, NetworkMonitorService, SchedulerService).
+
 
 ### Added
 
