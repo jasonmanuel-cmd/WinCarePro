@@ -1,0 +1,84 @@
+<UserControl x:Class="WinCareDesktop.Views.SchedulerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:WinCareDesktop.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <Grid Margin="0,0,10,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ══ TOP BAR & TOGGLE ══════════════════════════════════════ -->
+        <Border Grid.Row="0" Style="{DynamicResource Card}" Padding="20" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Automatic Maintenance Scheduler" FontWeight="SemiBold"
+                               FontSize="16" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
+                    <TextBlock Text="Run silent background tune-ups automatically so your PC stays fast without manual effort."
+                               FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource Success}"
+                               FontWeight="SemiBold" Margin="0,6,0,0" />
+                </StackPanel>
+
+                <!-- Enable/Disable Master Switch -->
+                <Button Grid.Column="1" Command="{Binding ToggleEnabledCommand}"
+                        Padding="18,10" VerticalAlignment="Center"
+                        Background="{Binding Config.IsEnabled, Converter={x:Static vm:BooleanToPrimaryBrushConverter.Instance}}">
+                    <TextBlock Text="{Binding Config.IsEnabled, Converter={x:Static vm:BooleanToEnabledTextConverter.Instance}}"
+                               Foreground="White" FontWeight="Bold" FontSize="13" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ══ SETTINGS FORM ═════════════════════════════════════════ -->
+        <Border Grid.Row="1" Style="{DynamicResource Card}" Padding="24">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Maintenance Frequency" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,10" />
+
+                    <!-- Frequency Options -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                        <RadioButton Content="Daily" IsChecked="{Binding Config.Frequency, Converter={x:Static vm:StringEqualsConverter.Instance}, ConverterParameter='Daily'}"
+                                     GroupName="Freq" Margin="0,0,24,0" VerticalAlignment="Center" />
+                        <RadioButton Content="Weekly" IsChecked="{Binding Config.Frequency, Converter={x:Static vm:StringEqualsConverter.Instance}, ConverterParameter='Weekly'}"
+                                     GroupName="Freq" Margin="0,0,24,0" VerticalAlignment="Center" />
+                        <RadioButton Content="At Windows Startup" IsChecked="{Binding Config.Frequency, Converter={x:Static vm:StringEqualsConverter.Instance}, ConverterParameter='OnStartup'}"
+                                     GroupName="Freq" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Actions Included in Maintenance" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,14" />
+
+                    <!-- Tasks Checklist -->
+                    <Border Background="{DynamicResource SurfaceHover}" CornerRadius="8" Padding="16" Margin="0,0,0,20">
+                        <StackPanel>
+                            <CheckBox Content="Clean Temporary Files, Windows Logs &amp; Error Dumps"
+                                      IsChecked="{Binding Config.CleanTempFiles}" Margin="0,0,0,12" />
+                            <CheckBox Content="Automatically Empty Windows Recycle Bin"
+                                      IsChecked="{Binding Config.EmptyRecycleBin}" Margin="0,0,0,12" />
+                            <CheckBox Content="Trim Standby Memory &amp; Reclaim Inactive RAM"
+                                      IsChecked="{Binding Config.OptimizeRam}" Margin="0,0,0,12" />
+                            <CheckBox Content="Flush Stale DNS Resolver Cache"
+                                      IsChecked="{Binding Config.FlushDns}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Save Action -->
+                    <Button Style="{DynamicResource PrimaryButton}"
+                            Content="💾 Save Automation Preferences" Command="{Binding SaveSettingsCommand}"
+                            HorizontalAlignment="Left" Padding="20,10" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

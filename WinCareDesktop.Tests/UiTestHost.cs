@@ -30,7 +30,17 @@ internal static class UiTestHost
         {
             dispatcher = Dispatcher.CurrentDispatcher;
             if (Application.Current == null)
-                new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            {
+                var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                try
+                {
+                    app.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/WinCareDesktop;component/Themes/Theme.xaml", UriKind.Absolute)
+                    });
+                }
+                catch { }
+            }
             ready.Set();
             Dispatcher.Run();
         })

@@ -1,0 +1,174 @@
+<UserControl x:Class="WinCareDesktop.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:WinCareDesktop.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,10,20">
+
+            <!-- ══ HERO STATUS CARD ══════════════════════════════════════ -->
+            <Border Style="{DynamicResource Card}" Background="{DynamicResource Surface}" Padding="24" Margin="0,0,0,20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Score Badge -->
+                    <Border Grid.Column="0" Width="100" Height="100" CornerRadius="50"
+                            Background="{DynamicResource PrimaryLight}"
+                            BorderBrush="{DynamicResource Primary}" BorderThickness="3"
+                            VerticalAlignment="Center" Margin="0,0,24,0">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding Main.Score, StringFormat={}{0:F0}%}"
+                                       FontFamily="{DynamicResource MonoFont}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{DynamicResource Primary}" HorizontalAlignment="Center" />
+                            <TextBlock Text="HEALTH" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextTertiary}" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Status Details -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="System Condition Overview" FontSize="18" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding OptimizationStatus}" FontSize="13"
+                                   Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+                        <!-- Progress Bar when optimizing -->
+                        <ProgressBar Height="6" Maximum="100" Value="{Binding OptimizationProgress}"
+                                     Foreground="{DynamicResource Primary}" Background="{DynamicResource Hairline}"
+                                     BorderThickness="0" Margin="0,0,20,0"
+                                     Visibility="{Binding IsBusy, Converter={x:Static vm:BoolToVisibilityConverter.Instance}, FallbackValue=Collapsed}" />
+                    </StackPanel>
+
+                    <!-- Optimize Action Button -->
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="180">
+                        <Button Style="{DynamicResource PrimaryButton}"
+                                Command="{Binding RunQuickOptimizeCommand}"
+                                IsEnabled="{Binding IsBusy, Converter={x:Static vm:InverseBooleanConverter.Instance}}"
+                                Padding="20,12">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⚡" Margin="0,0,8,0" FontSize="14" />
+                                <TextBlock Text="1-Click Optimize" FontSize="14" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="Reclaims RAM, temp junk &amp; DNS" FontSize="11"
+                                   Foreground="{DynamicResource TextTertiary}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ══ LIVE TELEMETRY ROW ════════════════════════════════════ -->
+            <UniformGrid Columns="3" Margin="0,0,0,20">
+
+                <!-- RAM Card -->
+                <Border Style="{DynamicResource Card}" Margin="0,0,12,0" Padding="16">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="RAM Usage" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="{Binding Main.RamPercent, StringFormat={}{0:F0}%}"
+                                       HorizontalAlignment="Right" FontWeight="Bold" FontFamily="{DynamicResource MonoFont}"
+                                       Foreground="{DynamicResource Primary}" />
+                        </Grid>
+                        <ProgressBar Height="8" Maximum="100" Value="{Binding Main.RamPercent}"
+                                     Foreground="{DynamicResource Primary}" Background="{DynamicResource Hairline}"
+                                     BorderThickness="0" Margin="0,0,0,8" />
+                        <TextBlock Text="{Binding Main.TotalRamGb, StringFormat={}Total Installed: {0:F1} GB}"
+                                   FontSize="11" Foreground="{DynamicResource TextTertiary}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Disk Card -->
+                <Border Style="{DynamicResource Card}" Margin="6,0,6,0" Padding="16">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="System Disk (C:)" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="{Binding Main.StoragePercent, StringFormat={}{0:F0}%}"
+                                       HorizontalAlignment="Right" FontWeight="Bold" FontFamily="{DynamicResource MonoFont}"
+                                       Foreground="{DynamicResource Primary}" />
+                        </Grid>
+                        <ProgressBar Height="8" Maximum="100" Value="{Binding Main.StoragePercent}"
+                                     Foreground="{DynamicResource Primary}" Background="{DynamicResource Hairline}"
+                                     BorderThickness="0" Margin="0,0,0,8" />
+                        <TextBlock Text="{Binding Main.FreeStorageGb, StringFormat={}Free Space: {0:F1} GB}"
+                                   FontSize="11" Foreground="{DynamicResource TextTertiary}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Privacy & Telemetry Card -->
+                <Border Style="{DynamicResource Card}" Margin="12,0,0,0" Padding="16">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Privacy Guard" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="{Binding Main.TrackersBlocked, StringFormat={}{0} Active}"
+                                       HorizontalAlignment="Right" FontWeight="Bold" FontFamily="{DynamicResource MonoFont}"
+                                       Foreground="{DynamicResource Success}" />
+                        </Grid>
+                        <TextBlock Text="Windows telemetry, ad IDs, and background tracking shields."
+                                   FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <TextBlock Text="100% Offline &amp; Private" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Success}" />
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <!-- ══ QUICK TOOLS & METRICS ═════════════════════════════════ -->
+            <Border Style="{DynamicResource Card}" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="Quick Maintenance Actions" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,16" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Standby RAM Flush -->
+                        <Border Grid.Column="0" Background="{DynamicResource SurfaceHover}" CornerRadius="8"
+                                Padding="14" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="Flush Standby RAM" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                <TextBlock Text="Releases cached memory held by inactive Windows apps."
+                                           FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,4,0,12" />
+                                <Button Content="Flush Memory" Command="{Binding Main.FlushRamStandbyCommand}"
+                                        HorizontalAlignment="Left" Padding="12,6" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Clean Temp Junk -->
+                        <Border Grid.Column="1" Background="{DynamicResource SurfaceHover}" CornerRadius="8"
+                                Padding="14" Margin="4,0,4,0">
+                            <StackPanel>
+                                <TextBlock Text="Clean Temp Junk" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                <TextBlock Text="Scans and removes user temp files, logs, and crash dumps."
+                                           FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,4,0,12" />
+                                <Button Content="Run Cleanup" Command="{Binding Main.RunOptimizationCommand}"
+                                        HorizontalAlignment="Left" Padding="12,6" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Refresh Diagnostics -->
+                        <Border Grid.Column="2" Background="{DynamicResource SurfaceHover}" CornerRadius="8"
+                                Padding="14" Margin="8,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Hardware Diagnostics" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                <TextBlock Text="Check CPU temperature, disk SMART health, and boot uptime."
+                                           FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,4,0,12" />
+                                <Button Content="Refresh Hardware" Command="{Binding RefreshTelemetryCommand}"
+                                        HorizontalAlignment="Left" Padding="12,6" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

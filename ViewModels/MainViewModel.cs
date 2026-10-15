@@ -35,6 +35,29 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _diskHealthText = "Checking…";
     [ObservableProperty] private string _topMemoryText = "—";
 
+    [ObservableProperty] private ViewModelBase _currentView = null!;
+    public ObservableCollection<NavigationItem> NavigationItems { get; } = new();
+
+    public DashboardViewModel DashboardVM { get; }
+    public DiskAnalyzerViewModel DiskAnalyzerVM { get; }
+    public StartupManagerViewModel StartupManagerVM { get; }
+    public AppUninstallViewModel AppUninstallVM { get; }
+    public PrivacyViewModel PrivacyVM { get; }
+    public NetworkMonitorViewModel NetworkMonitorVM { get; }
+    public SchedulerViewModel SchedulerVM { get; }
+    public HistoryLogsViewModel HistoryLogsVM { get; }
+
+    [RelayCommand]
+    public void Navigate(NavigationItem? item)
+    {
+        if (item?.ViewModel == null) return;
+        foreach (var nav in NavigationItems) nav.IsSelected = false;
+        item.IsSelected = true;
+        CurrentView?.OnNavigatedFrom();
+        CurrentView = item.ViewModel;
+        CurrentView.OnNavigatedTo();
+    }
+
     public ObservableCollection<string> Logs { get; } = new();
     public ObservableCollection<BloatwareApp> BloatwareApps { get; } = new();
     public ObservableCollection<DnsResolver> DnsResolvers { get; } = new();
@@ -56,6 +79,29 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
+        // Initialize child ViewModels
+        DashboardVM = new DashboardViewModel(this);
+        DiskAnalyzerVM = new DiskAnalyzerViewModel();
+        StartupManagerVM = new StartupManagerViewModel();
+        AppUninstallVM = new AppUninstallViewModel();
+        PrivacyVM = new PrivacyViewModel(this);
+        NetworkMonitorVM = new NetworkMonitorViewModel(this);
+        SchedulerVM = new SchedulerViewModel();
+        HistoryLogsVM = new HistoryLogsViewModel(this);
+
+        // Build navigation menu
+        var dashboardNav = new NavigationItem("Dashboard", "📊", "System overview & health", DashboardVM) { IsSelected = true };
+        NavigationItems.Add(dashboardNav);
+        NavigationItems.Add(new NavigationItem("Disk Analyzer", "💾", "Large file visualizer", DiskAnalyzerVM));
+        NavigationItems.Add(new NavigationItem("Startup Apps", "🚀", "Boot speed manager", StartupManagerVM));
+        NavigationItems.Add(new NavigationItem("App Remover", "📦", "Uninstall software & bloat", AppUninstallVM));
+        NavigationItems.Add(new NavigationItem("Privacy Shield", "🛡️", "Windows telemetry blocker", PrivacyVM));
+        NavigationItems.Add(new NavigationItem("Network & DNS", "🌐", "Traffic & secure DNS", NetworkMonitorVM));
+        NavigationItems.Add(new NavigationItem("Auto-Clean", "🕒", "Scheduled maintenance", SchedulerVM));
+        NavigationItems.Add(new NavigationItem("History & Logs", "📜", "Undo history & live logs", HistoryLogsVM));
+
+        CurrentView = DashboardVM;
+
         foreach (var dns in _dnsList) DnsResolvers.Add(dns);
         LoadPrivacyFromSystem();
         SyncDnsFromSystem();

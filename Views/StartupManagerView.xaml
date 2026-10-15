@@ -1,0 +1,106 @@
+<UserControl x:Class="WinCareDesktop.Views.StartupManagerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:WinCareDesktop.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <Grid Margin="0,0,10,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ══ TOP BAR & REFRESH ═════════════════════════════════════ -->
+        <Border Grid.Row="0" Style="{DynamicResource Card}" Padding="16" Margin="0,0,0,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
+                    <TextBlock Text="Disabling unneeded startup programs can dramatically reduce Windows boot time and free up background memory."
+                               FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Button Grid.Column="1" Content="🔄 Refresh" Command="{Binding RefreshCommand}"
+                        Padding="14,8" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- ══ STARTUP ENTRIES LIST ══════════════════════════════════ -->
+        <Border Grid.Row="1" Style="{DynamicResource Card}" Padding="0">
+            <ListBox ItemsSource="{Binding Entries}" Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0,0,0,1" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="16,12"
+                                            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Hairline}">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="110" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Name & Command -->
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}" />
+                                <TextBlock Text="{Binding Command}" FontSize="11"
+                                           Foreground="{DynamicResource TextTertiary}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <!-- Location Badge -->
+                            <Border Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                    Background="{DynamicResource SurfaceHover}" CornerRadius="4" Padding="6,3">
+                                <TextBlock Text="{Binding Location}" FontSize="11" Foreground="{DynamicResource TextSecondary}" />
+                            </Border>
+
+                            <!-- Impact Pill -->
+                            <Border Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                    Background="{DynamicResource SurfaceHover}" CornerRadius="4" Padding="8,3">
+                                <TextBlock Text="{Binding Impact, StringFormat={}Impact: {0}}" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Warning}" />
+                            </Border>
+
+                            <!-- Toggle Status Button -->
+                            <Button Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Command="{Binding DataContext.ToggleItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"
+                                    Padding="12,6">
+                                <TextBlock Text="{Binding IsEnabled, Converter={x:Static vm:BooleanToEnabledTextConverter.Instance}}"
+                                           FontWeight="SemiBold" FontSize="12" />
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+    </Grid>
+</UserControl>

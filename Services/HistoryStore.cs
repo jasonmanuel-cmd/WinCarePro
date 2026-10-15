@@ -31,6 +31,8 @@ public class HistoryStore
 
     public string FilePath => _path;
 
+    public int MaxHistoryEntries => MaxEntries;
+
     public List<OptimizationTransaction> Load()
     {
         lock (_gate)

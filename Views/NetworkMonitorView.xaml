@@ -1,0 +1,135 @@
+<UserControl x:Class="WinCareDesktop.Views.NetworkMonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:WinCareDesktop.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,10,20">
+
+            <!-- ══ LATENCY & DNS FLUSH CARD ══════════════════════════════ -->
+            <Border Style="{DynamicResource Card}" Padding="20" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Network Latency &amp; Diagnostic Connection" FontWeight="SemiBold"
+                                   FontSize="15" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding PingStatus}" FontSize="13"
+                                   Foreground="{DynamicResource Primary}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="Current Configured DNS: " FontSize="12" Foreground="{DynamicResource TextTertiary}">
+                            <Run Text="{Binding ActiveDnsName}" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{DynamicResource PrimaryButton}"
+                                Content="📶 Test Latency" Command="{Binding TestPingCommand}"
+                                Padding="14,8" Margin="0,0,8,0" />
+                        <Button Content="🧹 Flush DNS Cache" Command="{Binding FlushDnsCommand}"
+                                Padding="14,8" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ══ ACTIVE ADAPTERS ═══════════════════════════════════════ -->
+            <Border Style="{DynamicResource Card}" Padding="16" Margin="0,0,0,16">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <TextBlock Text="Active Network Interfaces" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimary}" />
+                        <Button Content="Refresh Adapters" Command="{Binding RefreshAdaptersCommand}"
+                                HorizontalAlignment="Right" Padding="10,4" />
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Interfaces}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceHover}" CornerRadius="8"
+                                        Padding="14,10" Margin="0,0,0,6" BorderBrush="{DynamicResource Hairline}" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="140" />
+                                            <ColumnDefinition Width="140" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimary}" />
+                                            <TextBlock Text="{Binding Description}" FontSize="11"
+                                                       Foreground="{DynamicResource TextTertiary}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Total Received" FontSize="11" Foreground="{DynamicResource TextTertiary}" />
+                                            <TextBlock Text="{Binding FormattedReceived}" FontWeight="Bold"
+                                                       FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource Primary}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Total Sent" FontSize="11" Foreground="{DynamicResource TextTertiary}" />
+                                            <TextBlock Text="{Binding FormattedSent}" FontWeight="Bold"
+                                                       FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource Primary}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ══ HIGH SPEED DNS RESOLVERS ══════════════════════════════ -->
+            <Border Style="{DynamicResource Card}" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="One-Click Secure DNS Resolver Switching" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
+                    <TextBlock Text="Switching from ISP default DNS to an encrypted, high-performance resolver improves web browsing speed and stops DNS snooping."
+                               FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,12" />
+
+                    <ItemsControl ItemsSource="{Binding DnsResolvers}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceHover}" CornerRadius="8"
+                                        Padding="14,10" Margin="0,0,0,6" BorderBrush="{DynamicResource Hairline}" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="120" />
+                                            <ColumnDefinition Width="120" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimary}" />
+                                            <TextBlock Text="{Binding Ip}" FontSize="11"
+                                                       FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource TextTertiary}" />
+                                        </StackPanel>
+
+                                        <Border Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                                Background="{DynamicResource Surface}" CornerRadius="4" Padding="8,4">
+                                            <TextBlock Text="{Binding Active, Converter={x:Static vm:BooleanToEnabledTextConverter.Instance}}"
+                                                       FontSize="11" FontWeight="SemiBold" />
+                                        </Border>
+
+                                        <Button Grid.Column="2" Content="Apply DNS"
+                                                Command="{Binding DataContext.SwitchDnsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Padding="12,6" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

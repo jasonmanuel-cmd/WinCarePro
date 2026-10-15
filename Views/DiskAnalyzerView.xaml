@@ -1,0 +1,142 @@
+<UserControl x:Class="WinCareDesktop.Views.DiskAnalyzerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:WinCareDesktop.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <Grid Margin="0,0,10,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ══ TOP BAR & QUICK PATHS ═════════════════════════════════ -->
+        <Border Grid.Row="0" Style="{DynamicResource Card}" Padding="16" Margin="0,0,0,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Target Directory to Analyze:" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6" />
+                    <TextBox Text="{Binding CurrentPath, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="10,8" FontSize="13" Background="{DynamicResource SurfaceHover}"
+                             BorderBrush="{DynamicResource Hairline}" Margin="0,0,16,0" />
+                </StackPanel>
+
+                <!-- Actions -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Style="{DynamicResource PrimaryButton}"
+                            Content="🔍 Scan Space" Command="{Binding StartScanCommand}"
+                            IsEnabled="{Binding IsScanning, Converter={x:Static vm:InverseBooleanConverter.Instance}}"
+                            Padding="16,8" Margin="0,0,8,0" />
+                    <Button Content="Cancel" Command="{Binding CancelScanCommand}"
+                            IsEnabled="{Binding IsScanning}" Padding="14,8" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══ STATUS & SUMMARY ═════════════════════════════════════ -->
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceHover}" CornerRadius="8"
+                Padding="12,8" Margin="0,0,0,12" BorderBrush="{DynamicResource Hairline}" BorderThickness="1">
+            <Grid>
+                <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="{DynamicResource TextSecondary}"
+                           VerticalAlignment="Center" />
+                <ProgressBar IsIndeterminate="True" Height="4" Width="100" HorizontalAlignment="Right"
+                             Foreground="{DynamicResource Primary}"
+                             Visibility="{Binding IsScanning, Converter={x:Static vm:BoolToVisibilityConverter.Instance}, FallbackValue=Collapsed}" />
+            </Grid>
+        </Border>
+
+        <!-- ══ INTERACTIVE RESULTS LIST ═════════════════════════════ -->
+        <Border Grid.Row="2" Style="{DynamicResource Card}" Padding="0">
+            <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
+                     Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0,0,0,2" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="16,12"
+                                            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Hairline}">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PrimaryLight}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Category Badge -->
+                            <Border Grid.Column="0" Background="{DynamicResource SurfaceHover}" CornerRadius="4"
+                                    Padding="8,4" Margin="0,0,14,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextSecondary}" />
+                            </Border>
+
+                            <!-- Name & Path -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding FullPath}" FontSize="11"
+                                           Foreground="{DynamicResource TextTertiary}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <!-- Percentage & Size -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="{Binding FormattedSize}" FontWeight="Bold"
+                                               FontFamily="{DynamicResource MonoFont}" FontSize="12"
+                                               Foreground="{DynamicResource Primary}" />
+                                    <TextBlock Text="{Binding PercentageOfParent, StringFormat={}{0:F1}%}"
+                                               HorizontalAlignment="Right" FontSize="11"
+                                               Foreground="{DynamicResource TextTertiary}" />
+                                </Grid>
+                                <ProgressBar Height="4" Maximum="100" Value="{Binding PercentageOfParent}"
+                                             Foreground="{DynamicResource Primary}" Background="{DynamicResource Hairline}"
+                                             BorderThickness="0" />
+                            </StackPanel>
+
+                            <!-- Row Action Buttons -->
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="📂" ToolTip="Open Location"
+                                        Command="{Binding DataContext.OpenInExplorerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Padding="8,4" Margin="0,0,6,0" />
+                                <Button Content="🗑️" ToolTip="Delete Item"
+                                        Command="{Binding DataContext.DeleteItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Padding="8,4" Foreground="{DynamicResource Error}" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+    </Grid>
+</UserControl>
