@@ -26,6 +26,7 @@
                     <TextBlock Text="Filter Installed Programs:" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6" />
                     <TextBox Text="{Binding SearchFilter, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="Filter installed programs"
                              Padding="10,8" FontSize="13" Background="{DynamicResource SurfaceHover}"
                              BorderBrush="{DynamicResource Hairline}" Margin="0,0,16,0" />
                 </StackPanel>
@@ -40,11 +41,13 @@
                             Padding="12,8" Margin="0,0,12,0" />
 
                     <!-- Uninstall Selected Button -->
-                    <Button Content="{Binding SelectedCount, StringFormat={}🗑️ Uninstall Selected ({0})}"
-                            Command="{Binding UninstallSelectedCommand}"
+                    <Button Command="{Binding UninstallSelectedCommand}"
+                            AutomationProperties.Name="Uninstall selected programs"
                             IsEnabled="{Binding SelectedCount, Converter={x:Static vm:IntGreaterThanZeroConverter.Instance}}"
                             Background="{DynamicResource Error}" Foreground="White"
-                            BorderThickness="0" FontWeight="SemiBold" Padding="16,8" />
+                            BorderThickness="0" FontWeight="SemiBold" Padding="16,8">
+                        <TextBlock Text="{Binding SelectedCount, StringFormat={}Uninstall Selected ({0})}" />
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
@@ -52,13 +55,16 @@
         <!-- ══ STATUS BAR ════════════════════════════════════════════ -->
         <Border Grid.Row="1" Background="{DynamicResource SurfaceHover}" CornerRadius="8"
                 Padding="12,8" Margin="0,0,0,12" BorderBrush="{DynamicResource Hairline}" BorderThickness="1">
-            <Grid>
-                <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="{DynamicResource TextSecondary}"
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center">
+                    <Button Content="Cancel remaining / stop waiting" Command="{Binding CancelUninstallCommand}" Visibility="{Binding IsUninstalling, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}" />
+                    <ProgressBar IsIndeterminate="True" Height="4" Width="100"
+                                 Foreground="{DynamicResource Primary}"
+                                 Visibility="{Binding IsLoading, Converter={x:Static vm:BoolToVisibilityConverter.Instance}, FallbackValue=Collapsed}" />
+                </StackPanel>
+                <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextSecondary}"
                            VerticalAlignment="Center" />
-                <ProgressBar IsIndeterminate="True" Height="4" Width="100" HorizontalAlignment="Right"
-                             Foreground="{DynamicResource Primary}"
-                             Visibility="{Binding IsLoading, Converter={x:Static vm:BoolToVisibilityConverter.Instance}, FallbackValue=Collapsed}" />
-            </Grid>
+            </DockPanel>
         </Border>
 
         <!-- ══ APPS LIST ═════════════════════════════════════════════ -->
@@ -98,7 +104,9 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- Checkbox -->
-                            <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}"
+                                      AutomationProperties.Name="{Binding Name, StringFormat=Select {0} for uninstall}"
+                                      VerticalAlignment="Center" Margin="0,0,16,0" />
 
                             <!-- Name & Publisher -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">

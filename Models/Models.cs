@@ -23,6 +23,11 @@ public enum UndoKind
     PrivacyRegistry = 1,
     /// <summary>Reinstalls an app package.</summary>
     ReinstallApp = 2,
+    DnsSettings = 3,
+    /// <summary>Restores the previously active Windows power scheme.</summary>
+    PowerPlan = 4,
+    /// <summary>Restores a toggled startup application's enabled/disabled state.</summary>
+    StartupEntry = 5,
 }
 
 public class OptimizationTransaction
@@ -37,7 +42,11 @@ public class OptimizationTransaction
     /// Temp-file deletion is irreversible, so those transactions must not
     /// advertise themselves as undoable.
     /// </summary>
-    public bool Reversable => Kind != UndoKind.DisplayOnly;
+    public bool Reversable =>
+        Kind == UndoKind.DnsSettings ||
+        (Kind == UndoKind.PrivacyRegistry && UndoPayload?.StartsWith("v3|") == true) ||
+        (Kind == UndoKind.PowerPlan && UndoPayload?.StartsWith("v1|") == true) ||
+        (Kind == UndoKind.StartupEntry && UndoPayload?.StartsWith("v1|") == true);
 
     /// <summary>
     /// Persisted by name so the history file stays readable and survives
@@ -65,10 +74,17 @@ public class BloatwareApp
     public string Reason { get; set; } = "";
 }
 
-public class PrivacyShield
+public class PrivacyShield : CommunityToolkit.Mvvm.ComponentModel.ObservableObject
 {
     public string Name { get; set; } = "";
-    public bool Enabled { get; set; }
+    private bool? _blocked;
+    public bool? Blocked
+    {
+        get => _blocked;
+        set { if (SetProperty(ref _blocked, value)) { OnPropertyChanged(nameof(Enabled)); OnPropertyChanged(nameof(StateText)); } }
+    }
+    public bool Enabled { get => Blocked == true; set => Blocked = value; }
+    public string StateText => Blocked switch { true => "Protected (off)", false => "Not protected (on)", null => "Unknown" };
 }
 
 public class DnsResolver : System.ComponentModel.INotifyPropertyChanged
@@ -117,6 +133,9 @@ public class CleanupCandidate
     public long Bytes { get; set; }
     public string Category { get; set; } = "";
     public bool IsDirectory { get; set; }
+    public DateTime? LastWriteUtc { get; set; }
+    public DateTime? CreatedUtc { get; set; }
+    public List<CleanupCandidate>? Snapshot { get; set; }
 }
 
 /// <summary>

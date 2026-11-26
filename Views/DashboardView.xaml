@@ -4,13 +4,21 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:WinCareDesktop.ViewModels"
+             xmlns:services="clr-namespace:WinCareDesktop.Services"
              mc:Ignorable="d" 
              d:DesignHeight="700" d:DesignWidth="900">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="0,0,10,20">
 
-            <!-- ══ HERO STATUS CARD ══════════════════════════════════════ -->
-            <Border Style="{DynamicResource Card}" Background="{DynamicResource Surface}" Padding="24" Margin="0,0,0,20">
+            <!-- ══ FLIGHT-DECK HERO COMMAND POD ═════════════════════════ -->
+            <Border CornerRadius="12" Padding="24" Margin="0,0,0,20"
+                    BorderBrush="#1E3A3F" BorderThickness="1">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#0F172A" Offset="0.0" />
+                        <GradientStop Color="#112830" Offset="1.0" />
+                    </LinearGradientBrush>
+                </Border.Background>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -18,30 +26,33 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Score Badge -->
-                    <Border Grid.Column="0" Width="100" Height="100" CornerRadius="50"
-                            Background="{DynamicResource PrimaryLight}"
-                            BorderBrush="{DynamicResource Primary}" BorderThickness="3"
+                    <!-- Orbital Telemetry Ring -->
+                    <Border Grid.Column="0" Width="98" Height="98" CornerRadius="49"
+                            Background="#132E35"
+                            BorderBrush="#2DD4BF" BorderThickness="2.5"
                             VerticalAlignment="Center" Margin="0,0,24,0">
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                            <TextBlock Text="{Binding Main.Score, StringFormat={}{0:F0}%}"
-                                       FontFamily="{DynamicResource MonoFont}" FontSize="28" FontWeight="Bold"
-                                       Foreground="{DynamicResource Primary}" HorizontalAlignment="Center" />
-                            <TextBlock Text="HEALTH" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextTertiary}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{Binding Main.ScoreDisplay}"
+                                       FontFamily="{DynamicResource MonoFont}" FontSize="27" FontWeight="Bold"
+                                       Foreground="#2DD4BF" HorizontalAlignment="Center" />
+                            <TextBlock Text="SYS INDEX" FontSize="9.5" FontWeight="SemiBold"
+                                       FontFamily="{DynamicResource MonoFont}"
+                                       Foreground="#94A3B8" HorizontalAlignment="Center" />
                         </StackPanel>
                     </Border>
 
                     <!-- Status Details -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,24,0">
+                        <TextBlock Text="FLIGHT DECK // SYSTEM CONDITION" FontSize="10.5" FontWeight="Bold"
+                                   FontFamily="{DynamicResource MonoFont}" Foreground="#2DD4BF" Margin="0,0,0,4" />
                         <TextBlock Text="System Condition Overview" FontSize="18" FontWeight="Bold"
-                                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
-                        <TextBlock Text="{Binding OptimizationStatus}" FontSize="13"
-                                   Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                   Foreground="#F8FAFC" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding OptimizationStatus}" FontSize="12.5"
+                                   Foreground="#CBD5E1" TextWrapping="Wrap" Margin="0,0,0,10" />
 
                         <!-- Progress Bar when optimizing -->
-                        <ProgressBar Height="6" Maximum="100" Value="{Binding OptimizationProgress}"
-                                     Foreground="{DynamicResource Primary}" Background="{DynamicResource Hairline}"
+                        <ProgressBar Height="5" Maximum="100" Value="{Binding OptimizationProgress}"
+                                     Foreground="#2DD4BF" Background="#1E293B"
                                      BorderThickness="0" Margin="0,0,20,0"
                                      Visibility="{Binding IsBusy, Converter={x:Static vm:BoolToVisibilityConverter.Instance}, FallbackValue=Collapsed}" />
                     </StackPanel>
@@ -49,18 +60,70 @@
                     <!-- Optimize Action Button -->
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="180">
                         <Button Style="{DynamicResource PrimaryButton}"
+                                AutomationProperties.Name="Preview temporary file cleanup"
                                 Command="{Binding RunQuickOptimizeCommand}"
                                 IsEnabled="{Binding IsBusy, Converter={x:Static vm:InverseBooleanConverter.Instance}}"
                                 Padding="20,12">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="⚡" Margin="0,0,8,0" FontSize="14" />
-                                <TextBlock Text="1-Click Optimize" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock Text="&#xE945;" FontFamily="{DynamicResource IconFont}" Margin="0,0,8,0" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="Preview Cleanup" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <TextBlock Text="Reclaims RAM, temp junk &amp; DNS" FontSize="11"
-                                   Foreground="{DynamicResource TextTertiary}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                        <TextBlock Text="Review temporary files before deletion" FontSize="11"
+                                   Foreground="#94A3B8" HorizontalAlignment="Center" Margin="0,6,0,0" />
                     </StackPanel>
                 </Grid>
+            </Border>
+
+            <!-- Read-only guidance shares existing telemetry probes; actions only navigate. -->
+            <Border Style="{DynamicResource Card}" Padding="20" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="What to review next" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                    <TextBlock Text="{Binding Diagnostics.SampleStatus}" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,4,0,10" />
+                    <WrapPanel Margin="0,0,0,10">
+                        <Button x:Name="RescanGuidanceButton" Content="Rescan (read-only)" AutomationProperties.Name="Rescan read-only guidance"
+                                Command="{Binding Diagnostics.RescanCommand}" IsEnabled="{Binding Diagnostics.IsScanning, Converter={x:Static vm:InverseBooleanConverter.Instance}}" Margin="0,0,8,6" />
+                        <Button x:Name="CancelGuidanceButton" Content="Cancel scan" AutomationProperties.Name="Cancel guidance scan"
+                                Command="{Binding Diagnostics.CancelScanCommand}" IsEnabled="{Binding Diagnostics.IsScanning}" Margin="0,0,8,6" />
+                        <Button x:Name="PreviewExportButton" Content="Preview local report…" AutomationProperties.Name="Preview sanitized local diagnostic report"
+                                Command="{Binding Diagnostics.PrepareExportCommand}" IsEnabled="{Binding Diagnostics.IsExporting, Converter={x:Static vm:InverseBooleanConverter.Instance}}" Margin="0,0,0,6" />
+                    </WrapPanel>
+                    <TextBlock Text="{Binding Diagnostics.ScanStatus}" AutomationProperties.LiveSetting="Polite" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                    <ProgressBar IsIndeterminate="True" Height="4" Margin="0,0,0,10" AutomationProperties.Name="Read-only scan in progress"
+                                 Visibility="{Binding Diagnostics.IsScanning, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}" />
+                    <Border x:Name="ExportPreviewPanel" Background="{DynamicResource SurfaceHover}" CornerRadius="8" Padding="14" Margin="0,0,0,12"
+                            Visibility="{Binding Diagnostics.IsExportPreviewOpen, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel>
+                            <TextBlock Text="Review before saving" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="{x:Static services:DiagnosticExport.Disclosure}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" Margin="0,6,0,10" />
+                            <TextBox x:Name="ExportPreviewBox" Text="{Binding Diagnostics.ExportPreview, Mode=OneWay}" IsReadOnly="True" Height="180"
+                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                     AutomationProperties.Name="Exact sanitized report preview" FontFamily="{DynamicResource MonoFont}" FontSize="12" />
+                            <WrapPanel Margin="0,10,0,6">
+                                <Button x:Name="SaveExportButton" Content="Save report as…" AutomationProperties.Name="Choose destination and save reviewed report"
+                                        Command="{Binding Diagnostics.SaveExportCommand}" IsEnabled="{Binding Diagnostics.IsExporting, Converter={x:Static vm:InverseBooleanConverter.Instance}}" Margin="0,0,8,0" />
+                                <Button Content="Close preview" AutomationProperties.Name="Close diagnostic report preview" Command="{Binding Diagnostics.CloseExportCommand}"
+                                        IsEnabled="{Binding Diagnostics.IsExporting, Converter={x:Static vm:InverseBooleanConverter.Instance}}" />
+                            </WrapPanel>
+                            <TextBlock Text="{Binding Diagnostics.ExportStatus}" AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" />
+                        </StackPanel>
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Diagnostics.Guidance}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{DynamicResource Hairline}" BorderThickness="0,1,0,0" Padding="0,12,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                        <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,8" />
+                                        <Button Content="{Binding Action}" AutomationProperties.Name="{Binding Action}" HorizontalAlignment="Left"
+                                                Command="{Binding DataContext.OpenGuidanceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                IsEnabled="{Binding DataContext.Diagnostics.IsScanning, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static vm:InverseBooleanConverter.Instance}}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </Border>
 
             <!-- ══ LIVE TELEMETRY ROW ════════════════════════════════════ -->
@@ -71,14 +134,14 @@
                     <StackPanel>
                         <Grid Margin="0,0,0,8">
                             <TextBlock Text="RAM Usage" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
-                            <TextBlock Text="{Binding Main.RamPercent, StringFormat={}{0:F0}%}"
+                            <TextBlock Text="{Binding Main.RamUsageText}"
                                        HorizontalAlignment="Right" FontWeight="Bold" FontFamily="{DynamicResource MonoFont}"
                                        Foreground="{DynamicResource Primary}" />
                         </Grid>
                         <ProgressBar Height="8" Maximum="100" Value="{Binding Main.RamPercent}"
                                      Foreground="{DynamicResource Primary}" Background="{DynamicResource Hairline}"
                                      BorderThickness="0" Margin="0,0,0,8" />
-                        <TextBlock Text="{Binding Main.TotalRamGb, StringFormat={}Total Installed: {0:F1} GB}"
+                        <TextBlock Text="{Binding Main.RamCapacityText}"
                                    FontSize="11" Foreground="{DynamicResource TextTertiary}" />
                     </StackPanel>
                 </Border>
@@ -87,15 +150,15 @@
                 <Border Style="{DynamicResource Card}" Margin="6,0,6,0" Padding="16">
                     <StackPanel>
                         <Grid Margin="0,0,0,8">
-                            <TextBlock Text="System Disk (C:)" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
-                            <TextBlock Text="{Binding Main.StoragePercent, StringFormat={}{0:F0}%}"
+                            <TextBlock Text="System Drive" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="{Binding Main.StorageUsageText}"
                                        HorizontalAlignment="Right" FontWeight="Bold" FontFamily="{DynamicResource MonoFont}"
                                        Foreground="{DynamicResource Primary}" />
                         </Grid>
                         <ProgressBar Height="8" Maximum="100" Value="{Binding Main.StoragePercent}"
                                      Foreground="{DynamicResource Primary}" Background="{DynamicResource Hairline}"
                                      BorderThickness="0" Margin="0,0,0,8" />
-                        <TextBlock Text="{Binding Main.FreeStorageGb, StringFormat={}Free Space: {0:F1} GB}"
+                        <TextBlock Text="{Binding Main.StorageCapacityText}"
                                    FontSize="11" Foreground="{DynamicResource TextTertiary}" />
                     </StackPanel>
                 </Border>
@@ -109,13 +172,119 @@
                                        HorizontalAlignment="Right" FontWeight="Bold" FontFamily="{DynamicResource MonoFont}"
                                        Foreground="{DynamicResource Success}" />
                         </Grid>
-                        <TextBlock Text="Windows telemetry, ad IDs, and background tracking shields."
+                        <TextBlock Text="Two current-user settings: advertising ID and tailored experiences."
                                    FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" />
-                        <TextBlock Text="100% Offline &amp; Private" FontSize="11" FontWeight="SemiBold"
+                        <TextBlock Text="No automatic external network probes" FontSize="11" FontWeight="SemiBold"
                                    Foreground="{DynamicResource Success}" />
                     </StackPanel>
                 </Border>
             </UniformGrid>
+
+            <!-- ══ HARDWARE, UPTIME & SMART HEALTH STRIP ═════════════════ -->
+            <Border Style="{DynamicResource Card}" Padding="20" Margin="0,0,0,20">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Hardware, Boot Uptime &amp; SMART Drive Health" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="On-demand two-point CPU load, Windows uptime since last full reboot, physical disk SMART status, and top resident processes."
+                                       FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,12,0" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="Probe Hardware &amp; SMART"
+                                AutomationProperties.Name="Probe CPU load, boot uptime, and drive SMART health"
+                                Command="{Binding ProbeHardwareDiagnosticsCommand}"
+                                IsEnabled="{Binding IsProbingHardware, Converter={x:Static vm:InverseBooleanConverter.Instance}}"
+                                Padding="14,8" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <UniformGrid Columns="3">
+                        <Border Background="{DynamicResource SurfaceHover}" CornerRadius="8" Padding="12,10" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="CPU LOAD (1s SAMPLE)" FontSize="10" FontWeight="SemiBold"
+                                           FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource TextTertiary}" />
+                                <TextBlock Text="{Binding CpuDisplay}" FontSize="16" FontWeight="Bold"
+                                           FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource Primary}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{DynamicResource SurfaceHover}" CornerRadius="8" Padding="12,10" Margin="4,0,4,0">
+                            <StackPanel>
+                                <TextBlock Text="UPTIME SINCE BOOT" FontSize="10" FontWeight="SemiBold"
+                                           FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource TextTertiary}" />
+                                <TextBlock Text="{Binding Main.UptimeText}" FontSize="16" FontWeight="Bold"
+                                           FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource Primary}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{DynamicResource SurfaceHover}" CornerRadius="8" Padding="12,10" Margin="8,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="DRIVE SMART STATUS" FontSize="10" FontWeight="SemiBold"
+                                           FontFamily="{DynamicResource MonoFont}" Foreground="{DynamicResource TextTertiary}" />
+                                <TextBlock Text="{Binding Main.DiskHealthText}" FontSize="12.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}" TextTrimming="CharacterEllipsis" Margin="0,5,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <!-- ══ POWER & CPU RESPONSIVENESS ═══════════════════════════ -->
+            <Border Style="{DynamicResource Card}" Padding="20" Margin="0,0,0,20">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Power &amp; CPU Responsiveness" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="{Binding PowerSourceText}" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,12,0" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="{DynamicResource PrimaryLight}" CornerRadius="6"
+                                Padding="10,5" VerticalAlignment="Top">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Active: " FontSize="11" Foreground="{DynamicResource Primary}" />
+                                <TextBlock Text="{Binding ActivePowerPlanName}" FontSize="11" FontWeight="Bold"
+                                           Foreground="{DynamicResource Primary}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding PowerPlans}" Margin="0,8,0,6">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Active, Converter={x:Static vm:BooleanToPrimaryLightBrushConverter.Instance}}"
+                                        BorderBrush="{DynamicResource Hairline}" BorderThickness="1"
+                                        CornerRadius="8" Padding="12,8" Margin="0,0,10,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                        <Button Content="Apply"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Apply {0} power plan}"
+                                                Command="{Binding DataContext.SwitchPowerPlanCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                IsEnabled="{Binding DataContext.CanSwitchPowerPlan, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Padding="10,4" FontSize="11" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="{Binding PowerStatusMessage}" FontSize="11"
+                               Foreground="{DynamicResource TextTertiary}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
 
             <!-- ══ QUICK TOOLS & METRICS ═════════════════════════════════ -->
             <Border Style="{DynamicResource Card}" Padding="20">
@@ -134,10 +303,10 @@
                         <Border Grid.Column="0" Background="{DynamicResource SurfaceHover}" CornerRadius="8"
                                 Padding="14" Margin="0,0,8,0">
                             <StackPanel>
-                                <TextBlock Text="Flush Standby RAM" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
-                                <TextBlock Text="Releases cached memory held by inactive Windows apps."
+                                <TextBlock Text="Trim WinCare Memory" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                <TextBlock Text="Trims only WinCare’s working set, not the system standby list."
                                            FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,4,0,12" />
-                                <Button Content="Flush Memory" Command="{Binding Main.FlushRamStandbyCommand}"
+                                <Button Content="Trim Working Set" Command="{Binding Main.FlushRamStandbyCommand}"
                                         HorizontalAlignment="Left" Padding="12,6" />
                             </StackPanel>
                         </Border>
@@ -147,7 +316,7 @@
                                 Padding="14" Margin="4,0,4,0">
                             <StackPanel>
                                 <TextBlock Text="Clean Temp Junk" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
-                                <TextBlock Text="Scans and removes user temp files, logs, and crash dumps."
+                                <TextBlock Text="Preview exact temporary files; locked or changed files are skipped."
                                            FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,4,0,12" />
                                 <Button Content="Run Cleanup" Command="{Binding Main.RunOptimizationCommand}"
                                         HorizontalAlignment="Left" Padding="12,6" />
@@ -159,9 +328,10 @@
                                 Padding="14" Margin="8,0,0,0">
                             <StackPanel>
                                 <TextBlock Text="Hardware Diagnostics" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
-                                <TextBlock Text="Check CPU temperature, disk SMART health, and boot uptime."
+                                <TextBlock Text="Read RAM, system-drive capacity and two privacy preferences without changing settings."
                                            FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,4,0,12" />
-                                <Button Content="Refresh Hardware" Command="{Binding RefreshTelemetryCommand}"
+                                <Button Content="Rescan guidance" Command="{Binding RefreshTelemetryCommand}"
+                                        IsEnabled="{Binding Diagnostics.IsScanning, Converter={x:Static vm:InverseBooleanConverter.Instance}}"
                                         HorizontalAlignment="Left" Padding="12,6" />
                             </StackPanel>
                         </Border>

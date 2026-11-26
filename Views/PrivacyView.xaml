@@ -23,15 +23,22 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="{Binding BlockedCount, StringFormat={}{0} Active Privacy Shields}"
                                FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
-                    <TextBlock Text="Lock down Windows telemetry, diagnostic beacons, and targeted consumer advertising IDs."
+                    <TextBlock Text="Controls only advertising ID and tailored experiences. This does not disable diagnostic telemetry."
                                FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" Margin="0,6,12,0" Foreground="{DynamicResource TextSecondary}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{DynamicResource PrimaryButton}"
-                            Content="🛡️ Protect All" Command="{Binding EnableAllCommand}"
-                            Padding="14,8" Margin="0,0,8,0" />
-                    <Button Content="Restore Defaults" Command="{Binding DisableAllCommand}"
+                            AutomationProperties.Name="Protect all supported privacy settings"
+                            Command="{Binding EnableAllCommand}"
+                            Padding="14,8" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xEA18;" FontFamily="{DynamicResource IconFont}" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Protect All" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Content="Set Both On" Command="{Binding DisableAllCommand}"
                             Padding="14,8" />
                 </StackPanel>
             </Grid>
@@ -69,23 +76,28 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Grid.Column="0" Text="🔒" FontSize="18" VerticalAlignment="Center" Margin="0,0,16,0" />
+                            <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8"
+                                    Background="{DynamicResource PrimaryLight}" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="&#xE72E;" FontFamily="{DynamicResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Primary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
                                            Foreground="{DynamicResource TextPrimary}" />
-                                <TextBlock Text="Blocks background transmission of device diagnostics and telemetry events to remote cloud servers."
+                                <TextBlock Text="Enabled protection means this specific setting is off. Use History to restore its previous value."
                                            FontSize="11" Foreground="{DynamicResource TextTertiary}" TextWrapping="Wrap" />
                             </StackPanel>
 
                             <Button Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="{Binding Name, StringFormat=Toggle {0} privacy setting}"
                                     Command="{Binding DataContext.ToggleShieldCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     CommandParameter="{Binding}"
                                     Padding="14,8">
-                                <TextBlock Text="{Binding Enabled, Converter={x:Static vm:BooleanToEnabledTextConverter.Instance}}"
+                                <TextBlock Text="{Binding StateText}"
                                            FontWeight="SemiBold" FontSize="12" />
                             </Button>
                         </Grid>

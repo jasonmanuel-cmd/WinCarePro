@@ -23,7 +23,12 @@ public static class SingleInstance
     private static Mutex? _mutex;
 
     /// <summary>Identity of the running instance, shared across all users' sessions.</summary>
-    private const string MutexName = @"Local\WinCarePro.SingleInstance";
+    // A read-only verification instance must not acquire/focus the user's normal instance.
+    // Reusing a verification data root still permits only one instance of that isolated session.
+    private static string MutexName => SafetyMode.Enabled
+        ? @"Local\WinCarePro.Verification." + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(System.IO.Path.GetFullPath(SafetyMode.DataRoot).ToUpperInvariant())))[..24]
+        : @"Local\WinCarePro.SingleInstance";
 
     /// <summary>
     /// Attempts to claim exclusive ownership.

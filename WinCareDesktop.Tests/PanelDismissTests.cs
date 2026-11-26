@@ -52,7 +52,7 @@ public class PanelDismissTests
         RunSta(() =>
         {
             var vm = new MainViewModel();
-            Assert.Equal(8, vm.NavigationItems.Count);
+            Assert.Equal(new[] { "Dashboard", "Memory & Apps", "Defender", "Disk Analyzer", "Startup Apps", "App Remover", "Privacy Shield", "Network & DNS", "Auto-Clean", "History & Logs", "Options" }, vm.NavigationItems.Select(n=>n.Title));
 
             foreach (var item in vm.NavigationItems)
             {
@@ -79,7 +79,7 @@ public class PanelDismissTests
     {
         RunSta(() =>
         {
-            var vm = new SchedulerViewModel();
+            var vm = new SchedulerViewModel(new WinCareDesktop.Services.SchedulerService(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "schedule-" + Guid.NewGuid() + ".json")));
             Assert.NotNull(vm.Config);
             vm.ToggleEnabledCommand.Execute(null);
             Assert.NotNull(vm.StatusMessage);

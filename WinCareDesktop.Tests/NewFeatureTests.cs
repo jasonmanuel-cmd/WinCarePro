@@ -11,7 +11,7 @@ public class NewFeatureTests
     [Fact]
     public void Scheduler_service_saves_and_loads_configuration()
     {
-        var svc = new SchedulerService();
+        var svc = new SchedulerService(Path.Combine(Path.GetTempPath(), "schedule-" + Guid.NewGuid() + ".json"));
         var config = new ScheduleConfig
         {
             IsEnabled = true,
@@ -26,7 +26,7 @@ public class NewFeatureTests
         svc.SaveConfig(config);
         var loaded = svc.LoadConfig();
 
-        Assert.True(loaded.IsEnabled);
+        Assert.False(loaded.IsEnabled); // Persisted preferences never authorize a new session.
         Assert.Equal("Weekly", loaded.Frequency);
         Assert.Equal("04:30", loaded.TimeOfDay);
         Assert.True(loaded.CleanTempFiles);

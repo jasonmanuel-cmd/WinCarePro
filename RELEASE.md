@@ -1,170 +1,36 @@
-# Release checklist
+# Release checklist — HOLD / NO_SHIP
 
-Everything that has to be true before WinCare Pro is offered to anyone. Ordered
-so that the things which cost real money or real time come first.
+Production publication is **disabled**. `release-to-github.ps1 -Version 2.0.0` throws before any build, git, signing or network command. There is no bypass flag. A green local test or a candidate receipt is not a release approval.
 
-## 1. Code signing — non-negotiable
+## Current evidence and candidate
 
-An unsigned Windows executable triggers SmartScreen on first launch, and Windows
-Defender's reputation system treats an unknown binary as suspect. Users see
-"Windows protected your PC". For a paid product that is a dead sale.
+- Current reviewed portable: `artifacts/rescue-reviewed-portable/WinCare Pro.exe`, SHA-256 `3e082629060d9580b74e34fdfe996e105bc5dabcb64fec6ff940bb3026db1859`; preserve native sidecars. It is unsigned. Earlier `publish/`, MSI and MSIX are different/unreviewed candidates, not release assets.
+- `FINISH-VALIDATION.md`: November 24, 2026 full suite **303 passed, 0 failed, 0 skipped**, followed by Release build **0 warnings, 0 errors**. This is existing fresh validation evidence, not a fresh publish or native acceptance.
+- `FINISH-PACKAGING-FIXES.md`: **23 inert packaging/signing/release fixtures passed**. No actual signatures, installer execution, Store submission or publication were exercised.
+- `FINISH-NATIVE-GATES.md`: existing MSI unsigned; existing MSIX has a signature but fails trust verification and carries old version/payload. Do not redistribute either. Neither signature-file presence nor package construction proves installability.
 
-**This is the one thing that cannot be automated away.** It needs a code signing
-certificate bought from a CA:
+## Candidate pipeline (separately authorized execution only)
 
-| Type | Cost | Effect |
-|---|---|---|
-| OV (Organisation Validation) | ~$70–200/yr | SmartScreen reputation builds over time, hundreds of downloads |
-| EV (Extended Validation) | ~$250–500/yr | Immediate reputation, but requires a phone/video identity check |
+1. Freeze and review the full source snapshot, including tracked changes and untracked inputs; a clean `git diff` alone is insufficient. Select an approved runtime and toolchain. Publish once into a **new** candidate directory, then review/test that candidate. Do not overwrite the preserved reviewed artifact.
+2. If an update-source file is desired, approve its endpoint and add it **before** payload review/hashing. Packaging no longer injects a default endpoint or changes payload files.
+3. With separately approved credentials and timestamp endpoint, sign the candidate's executable payload using `sign-release.ps1 -Stage Payload -Targets <explicit-file-list> -SignToolPath <approved-tool> -TimestampUrl <approved-endpoint>`. Third-party signed libraries must also pass verification; do not silently replace their signatures. Credentials come only from `WINCARE_SIGN_PFX` / `WINCARE_SIGN_PWD`. The current PFX interface exposes the password in the child process argument list; production signer/service and isolation policy remain an owner decision. No credential is supplied or created by this work.
+4. Package **that same payload**, without another publish:
+   - MSI: `build-installer.ps1 -PayloadDir <candidate> -OutputDir <new-directory> -WixPath <approved-tool> -SignToolPath <approved-verifier>`.
+   - MSIX: `build-msix.ps1 -PayloadDir <candidate> -OutputDir <new-directory> -MakeAppxPath <approved-tool> -SignToolPath <approved-verifier> -Publisher <approved-subject> -PublisherDisplayName <approved-name> -IdentityName <approved-identity>`.
+   These commands are interface descriptions, not authorization to run them on this host. MSI administrative extraction uses Windows Installer and belongs in an approved disposable guest. Neither builder restores packages, rebuilds, republishes, signs, creates certificates, or overwrites an existing output directory.
+5. The project must contain one explicit three-part numeric Version. MSIX derives its fourth part as zero; an optional `-Version` must match exactly. Both builders check the executable's file version; MSI also checks WiX source version. There is **no 1.0 fallback**. Current project version is 2.0.0 / package version 2.0.0.0.
+6. Builders verify copied/extracted payload relative paths and SHA-256 hashes, check signatures by default, and produce `candidate.json` marked **HOLD / NO_SHIP**. The outer MSI/MSIX is still unsigned. `-UnsignedCandidate` explicitly permits unsigned payloads for local verification only; it cannot enable publishing and is not a Store approval mode.
+7. After separate authorization, sign the outer package with `sign-release.ps1 -Stage Package -Targets <explicit-package-list> ...`. Signing or verification errors/warnings fail the script. Re-extract the final signed package and independently recheck payload hashes/signatures and metadata, then record the final outer hash; the earlier candidate receipt predates signing and becomes stale. Native installation, upgrade/downgrade, repair/uninstall and trust tests remain required. No automated final signed-package release attestation is implemented here.
+8. An owner-approved release change must replace the unconditional HOLD only after all acceptance evidence and channel decisions exist. It must bind approval to the exact source, final signed artifacts and hashes, refuse dirty/untracked source drift, check every subprocess exit, and revalidate immediately before any tag/upload. Do not restore the old build-and-publish shortcut.
 
-For a first commercial release, EV is the better buy: the reputation problem is
-the single biggest source of refund requests, and EV avoids it entirely. A CA
-that sells cheap code signing without a real identity check is not worth using —
-the certificate will be revoked.
+## Decisions and native gates still open
 
-Once the `.pfx` exists:
+- Disposable Windows guest identity/reset baseline and the full matrix in `FINISH-NATIVE-GATES.md`: Defender, signed VLC, cleanup/recycle, permissions, privacy/DNS/startup, scheduler, uninstall and interactive accessibility/DPI/consent coverage.
+- Approved production signer/credential custody, trusted identity, timestamp service, and channel: direct MSI/portable, Store MSIX, or both. No self-signed production credential or assumed Store reservation.
+- Approved runtime/dependency security review and packaging toolchain. Cached preview tools are availability evidence only.
+- Supported OS claims by channel. Current MSIX manifest minimum is `10.0.19041.0`; do not inherit older 17763 claims as tested support. MSI/WPF supported-build acceptance remains to be established.
+- Final signed package install/upgrade/uninstall and payload parity. A passing fixture is not a Windows Installer or MakeAppx acceptance result.
+- Regenerate winget version/URL/hash/scope from the final approved asset. Existing winget metadata is stale; WiX declares `perUser`, not machine. Do not publish those manifests unchanged.
+- Publisher/support identity, licensing/privacy/legal review, update endpoint policy, CI and authorized distribution/release process. No pricing, reputation guarantee or purchase recommendation is implied.
 
-```powershell
-$env:WINCARE_SIGN_PFX     = "path\to\cert.pfx"
-$env:WINCARE_SIGN_PWD     = "password"
-.\sign-release.ps1
-```
-
-The certificate and password must never be committed. `sign-release.ps1` reads
-them from environment variables for that reason, and `.gitignore` blocks
-`*.pfx`.
-
-## 2. Decide what is being sold
-
-- Name. "WinCare Pro" is fine but generic and unsearchable. Check the
-  trademark and the Microsoft Store name before committing to it.
-- Price. Nothing in the app enforces this. Selling means either a store listing
-  (which handles payment and licensing) or a licence key checked at startup.
-  See §6.
-- Publisher identity. The `.csproj` says `Company=WinCare`, which shows up in
-  Explorer and Add/Remove Programs. Put a real entity there.
-- Support address. The crash message points users at a log file. They need
-  somewhere to send it.
-
-## 3. Installer
-
-```powershell
-.\build-installer.ps1
-```
-
-Produces `installer\WinCarePro-1.0.0.msi`. WiX is required:
-
-```powershell
-dotnet tool install --global wix
-```
-
-The MSI installs per-user, needs no elevation, registers in Add/Remove
-Programs, and uninstalls cleanly while leaving the user's undo history alone.
-
-## 4. Pre-flight checks
-
-```powershell
-.\build-release.ps1          # clean, build, test, publish
-.\build-installer.ps1        # MSI
-dotnet run --project Tools\RenderShots -c Release -- "$env:TEMP\shots"
-```
-
-Then **open the app and click everything.** The render harness produces PNGs of
-all 12 panels and is the fastest way to spot a layout regression, but it cannot
-test hover, keyboard focus, or anything that depends on real timing. Those need
-a person.
-
-Specifically check:
-
-- Every dashboard card opens its menu
-- Uninstall Programs lists both desktop and Store apps
-- Hover state is visible on all 11 cards — **never yet verified by anyone**
-- A second launch focuses the existing window instead of opening a second copy
-- DPI at 100%, 125%, 150% and 200%
-- Closing the window leaves no process behind
-- `%LOCALAPPDATA%\WinCarePro\crash.log` does not appear
-
-## 5. Legal
-
-Drafted and in the repo:
-
-- `LICENSE.md`
-- `PRIVACY.md`
-- `EULA.md`
-
-Read them before publishing. They were written to match what the app actually
-does — no telemetry, no network calls, all data local — but they are a starting
-point, not legal advice, and the warranty disclaimer in particular should be
-reviewed by whoever is actually the seller.
-
-## 6. Distribution
-
-The app is `net8.0-windows`, self-contained, and single-file. It needs Windows
-10 1809 or later, x64. No .NET runtime required on the target machine.
-
-Options, roughly in order of effort:
-
-- **Direct download** from a site. Simplest. Needs the MSI signed (§1) and a
-  download page that states the system requirements plainly.
-- **Microsoft Store.** MSIX packaging rather than MSI, so this is a different
-  build. Handles payment, updates and reputation. Requires a Partner Center
-  account and a passing review, which takes days and enforces its own policies.
-- **winget manifest.** Cheap to add on top of a signed MSI, and puts the app in
-  `winget search` and `winget install`. Good reach for a technical audience.
-
-### Free update endpoint
-
-The app's update check is manual and has two files in it, which are easy to
-confuse:
-
-1. `update-source.txt` ships **next to the exe**, and is generated by
-   `build-installer.ps1` on every build. One JSON line, no prose:
-
-   ```json
-   { "version": "1.0.0", "url": "https://raw.githubusercontent.com/jasonmanuel-cmd/WinCarePro/master/packaging/version.json" }
-   ```
-
-   The Diagnostics panel parses this file and reads `url` out of it.
-
-2. The `url` endpoint serves the current version. That is
-   `packaging\version.json` in this repo, served free over
-   raw.githubusercontent.com. Bump it when you ship:
-
-   ```json
-   { "version": "1.1.0" }
-   ```
-
-The app never fetches `update-source.txt` itself — it fetches the `url` inside
-it. Pointing `url` at `github.com/…/releases/latest` does not work: that
-returns an HTML page, and `UpdateChecker` requires JSON with a `version` key.
-
-No server to run, no recurring cost, and the privacy promise stays intact
-because the call only happens when the user clicks *Check for updates*.
-
-### Free monetization path
-
-If you ever want revenue without building a store SKU: ship the signed MSI for
-free, put a "Buy me a coffee"/Ko-fi link in the Diagnostics panel footer (the
-button I just added sits right under the diagnostics rows), and let the
-privacy stance be the marketing. v1.0 is freeware.
-
-## Known limitations to disclose
-
-- Verified only on Windows 10/11 x64. The uninstaller, power-plan and DISM
-  paths depend on tools that are not present on every SKU.
-- The uninstaller reads the classic registry and `Get-AppxPackage`. It will not
-  see portable apps or anything installed outside the standard mechanisms.
-- DISM component cleanup cannot be interrupted once started.
-- Uninstalling cannot be undone. History records it, but offers no rollback.
-- Hover styling has never been confirmed on a real display.
-
-## What is already verified
-
-- 110 tests, 0 warnings, clean build.
-- Every service that can be tested against real system state is, and those
-  assertions caught a genuinely dead feature (the power-plan switcher) that no
-  structural test would have found.
-- Test runs never write to the real undo history.
-- Single-instance guard verified by launching two real processes, and verified
-  again after a force-kill to confirm an abandoned mutex does not block
-  relaunch.
+Keep historical reports unchanged. `FINISH-PACKAGING-FIXES.md` supersedes the script-defect descriptions in the earlier audit only where backed by its fixture evidence; it does not clear native or production gates.

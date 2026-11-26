@@ -1,4 +1,14 @@
-# Microsoft Store (MSIX) publishing
+# Microsoft Store (MSIX) publishing — HOLD / NO_SHIP
+
+## Current status (November 24, 2026)
+
+**The historical instructions below are superseded; do not execute them.** Use `RELEASE.md` and `FINISH-PACKAGING-FIXES.md` for the current candidate-only interfaces. No Store identity/channel approval or submission is established. Current MSIX source minimum is `10.0.19041.0`; supported-build acceptance remains open.
+
+`FINISH-NATIVE-GATES.md` observed that the preserved `installer/WinCare.msix` contains a signature but fails trust verification, has version `1.0.0.0`, and embeds the old `publish/` executable rather than the reviewed candidate. The unsigned-package description below is historical, not current evidence.
+
+`build-msix.ps1` now consumes an explicit existing payload and new output directory, requires explicit tool/identity inputs, derives version from the project, and verifies payload hashes. It does not build/test/publish, discover credentials, create/export self-signed certificates, sign automatically, or assert installability. Its outer package is unsigned and remains on HOLD. `-UnsignedCandidate` is a local fixture mode, not permission to submit to a Store. Final signing, trust, native install/uninstall/data-location behavior and channel policy still need separate authorization and evidence.
+
+## Historical notes (withdrawn workflow; retained for context)
 
 The MSI is the primary download. This MSIX exists for one reason: **the Store
 signs the package for us**, which is the only way to get an authenticode

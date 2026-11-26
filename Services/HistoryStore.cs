@@ -24,9 +24,7 @@ public class HistoryStore
 
     public HistoryStore(string? path = null)
     {
-        _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WinCarePro", "history.json");
+        _path = path ?? Path.Combine(SafetyMode.DataRoot, "history.json");
     }
 
     public string FilePath => _path;
@@ -73,7 +71,7 @@ public class HistoryStore
             }
             catch
             {
-                // Persistence is best-effort. Losing history is preferable to crashing.
+                throw; // Recovery data must be durable before a reversible mutation.
             }
         }
     }

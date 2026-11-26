@@ -95,16 +95,16 @@ public class UndoKindTests
     }
 
     [Fact]
-    public void ReinstallApp_is_reversible()
+    public void Legacy_reinstall_is_not_promised_reversible()
     {
         var tx = new OptimizationTransaction { Kind = UndoKind.ReinstallApp };
-        Assert.True(tx.Reversable);
+        Assert.False(tx.Reversable);
     }
 
     [Fact]
     public void PrivacyRegistry_is_reversible()
     {
-        var tx = new OptimizationTransaction { Kind = UndoKind.PrivacyRegistry };
+        var tx = new OptimizationTransaction { Kind = UndoKind.PrivacyRegistry, UndoPayload = "v3|Advertising ID|absent|0" };
         Assert.True(tx.Reversable);
     }
 

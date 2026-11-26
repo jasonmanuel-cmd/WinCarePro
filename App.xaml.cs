@@ -11,8 +11,8 @@ public partial class App : Application
     /// <summary>Crash log is capped so a recurring fault cannot fill the disk.</summary>
     private const long MaxCrashLogBytes = 2 * 1024 * 1024;
 
-    private static string DataDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinCarePro");
+    private static string DataDir => SafetyMode.DataRoot;
+    private static bool ShouldWriteDiagnostics => !SafetyMode.Enabled && new RescueOptionsStore(Path.Combine(DataDir, "options.json")).Load().Value.LocalDiagnostics;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -36,10 +36,11 @@ public partial class App : Application
         // values themselves.
         try
         {
-            Directory.CreateDirectory(DataDir);
-            File.WriteAllText(
-                Path.Combine(DataDir, "environment.txt"),
-                Services.EnvironmentReport.Get());
+            if (ShouldWriteDiagnostics)
+            {
+                Directory.CreateDirectory(DataDir);
+                File.WriteAllText(Path.Combine(DataDir, "environment.txt"), Services.EnvironmentReport.Get());
+            }
         }
         catch
         {
@@ -104,6 +105,7 @@ public partial class App : Application
     /// </remarks>
     private static void WriteCrash(Exception ex)
     {
+        if (!ShouldWriteDiagnostics) return;
         try
         {
             Directory.CreateDirectory(DataDir);
@@ -140,9 +142,7 @@ public partial class App : Application
 
         return $"Something went wrong and WinCare has recovered.\n\n" +
                $"{ex.Message}\n\n" +
-               $"The details were written to:\n" +
-               $"{Path.Combine(DataDir, "crash.log")}\n\n" +
-               $"Also see environment.txt in the same folder for OS and tool info.\n\n" +
+               (ShouldWriteDiagnostics ? $"Local diagnostic logging is enabled. If the write succeeded, inspect {Path.Combine(DataDir, "crash.log")}.\n\n" : "Local diagnostic logging is disabled; no crash file was requested.\n\n") +
                $"Version {version}";
     }
 }

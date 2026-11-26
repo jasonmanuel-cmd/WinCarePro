@@ -9,23 +9,22 @@ public class ScheduleConfig
     public string Frequency { get; set; } = "Daily"; // Daily, Weekly, OnStartup
     public string TimeOfDay { get; set; } = "03:00";
     public bool CleanTempFiles { get; set; } = true;
-    public bool EmptyRecycleBin { get; set; } = true;
-    public bool OptimizeRam { get; set; } = true;
+    public bool EmptyRecycleBin { get; set; }
+    public bool OptimizeRam { get; set; }
     public bool FlushDns { get; set; } = false;
     public DateTime? LastRun { get; set; }
+    public int ConsentVersion { get; set; }
+    public string LastResult { get; set; } = "Not run";
 }
 
-public class SchedulerService
+public partial class SchedulerService
 {
     private readonly string _configPath;
 
-    public SchedulerService()
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var dir = Path.Combine(appData, "WinCarePro");
-        Directory.CreateDirectory(dir);
-        _configPath = Path.Combine(dir, "schedule.json");
-    }
+    public SchedulerService(string? configPath = null)
+        {
+            _configPath = configPath ?? Path.Combine(SafetyMode.DataRoot, "schedule.json");
+        }
 
     public ScheduleConfig LoadConfig()
     {
@@ -34,7 +33,9 @@ public class SchedulerService
             if (File.Exists(_configPath))
             {
                 var json = File.ReadAllText(_configPath);
-                return JsonSerializer.Deserialize<ScheduleConfig>(json) ?? new ScheduleConfig();
+                var config = JsonSerializer.Deserialize<ScheduleConfig>(json) ?? new ScheduleConfig();
+                config.IsEnabled = false; // Never revive a schedule without fresh consent in this session.
+                return config;
             }
         }
         catch { /* Fallback */ }
@@ -46,8 +47,10 @@ public class SchedulerService
         try
         {
             var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_configPath, json);
+            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
+            File.WriteAllText(_configPath + ".tmp", json);
+            File.Move(_configPath + ".tmp", _configPath, true);
         }
-        catch { /* Ignore IO errors */ }
+        catch { throw; }
     }
 }

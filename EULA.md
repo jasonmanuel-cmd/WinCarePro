@@ -1,92 +1,56 @@
-# End User Licence Agreement
+# End User License Agreement (EULA)
 
-**WinCare Pro — version 1.0, 5 October 2026**
+**WinCare Pro v2.0 — 25 November 2026**
 
-*(Drafted to match what the app actually does. Review before publishing — see
-`RELEASE.md`. This is not legal advice.)*
+*(Drafted to match exact v2.0 application behavior. Review jurisdiction/contact details before public sales — see `MONETIZATION-READY-CHECKLIST.md`.)*
 
-## 1. Licence
+## 1. License Grant & Scope
 
-WinCare Pro is licensed, not sold. Subject to the terms below, you get a
-non-exclusive, non-transferable, revocable licence to install and use it on any
-number of computers you own or control.
+WinCare Pro is licensed, not sold.
+- **Community / Beta Evaluation:** You may install and evaluate WinCare Pro free of charge on computers you own or control.
+- **WinCare Pro Paid License (`WCP2.` key or Microsoft Store purchase):** Grants a non-exclusive license to activate and use WinCare Pro v2.x (all `2.x` minor and maintenance updates) on up to the number of Windows PCs specified on your order (default: **1 PC**). You may transfer your single-PC license to a replacement computer you own by removing the local license on the old machine (`Options → Remove Local License`). Future major versions (e.g., `v3.0`) may be offered separately.
 
-## 2. What the app does when you use it
+## 2. Honest System Behavior & Reversibility
 
-WinCare modifies your system. Specifically, and only when you ask it to:
+WinCare Pro modifies system state **only when you explicitly confirm or trigger an action**:
 
-- deletes files from your temporary folders
-- empties the Recycle Bin
-- deletes staged Windows Update downloads
-- runs the Windows component-store cleanup
-- flushes memory caches
-- changes your DNS server and power plan
-- changes Windows privacy registry values
-- runs a program's own uninstaller, or removes a Microsoft Store app
+- **Genuinely Reversible Actions (via History & Logs → Rollback):**
+  - Windows Power Plan changes (`Balanced`, `High performance`, `Power saver`)
+  - Startup program enable/disable toggles
+  - Supported current-user Privacy Shield registry toggles (`Advertising ID`, `Tailored Experiences`)
+  - IPv4 DNS server changes on a selected network adapter
+  *(Note: if a setting was subsequently modified outside WinCare Pro, Rollback will safely refuse to overwrite the newer external state.)*
 
-**These actions are not reversible in most cases.** WinCare records what it did
-in a local history, but that history is a record, not an undo. Where a genuine
-reversal exists — a privacy toggle, a Store app re-registration — the app offers
-it; where it does not, the app says so rather than offering a "Revert" button
-that cannot work.
+- **Actions NOT Automatically Reversible by WinCare Pro:**
+  - Confirmed temporary-file cleanup (permanent deletion of unchanged previewed temp files)
+  - Disk Space Analyzer removals (sent to the Windows Recycle Bin; restore manually from Recycle Bin before emptying it)
+  - Confirmed graceful optional-app close (`CloseMainWindow()` only; save unsaved work beforehand)
+  - Application uninstallation (delegated to the vendor's uninstaller or `Remove-AppxPackage`)
+  - Microsoft Defender scans (remediation/quarantine is managed inside Windows Security → Protection history)
 
-Take a backup before using the cleanup tools. Removing your Recycle Bin empties
-it permanently.
+Always maintain regular backups of important personal files before running disk cleanup or uninstallation tools.
 
-## 3. No warranty
+## 3. Standard User Privilege (`asInvoker`)
 
-**WinCare Pro is provided "as is", without warranty of any kind, express or
-implied**, including but not limited to warranties of merchantability, fitness
-for a particular purpose, and non-infringement.
+WinCare Pro runs with standard user permissions (`asInvoker`) by default and does not install kernel drivers, background services, or login tasks. Certain Windows actions (such as changing adapter IPv4 DNS or uninstalling machine-wide software) require Administrator privileges and will clearly inform you when elevation is needed.
 
-The app is a convenience tool operating on a complex operating system. We test
-it against real system state, and it is written to be honest about what it can
-and cannot do. We cannot guarantee it is correct on every hardware
-configuration, Windows edition, or third-party modification.
+## 4. Refunds (Direct Purchases)
 
-## 4. Limitation of liability
+Direct license purchases include a **30-day no-questions-asked refund window** from the date of purchase. Microsoft Store purchases are governed by Microsoft Store's standard refund policy. Upon refund, remove the local license key from your PC.
 
-To the maximum extent permitted by law, the authors and copyright holders are
-not liable for any direct, indirect, incidental, special, consequential or
-punitive damages, or for any loss of data, system instability, lost
-configuration, or network changes arising from your use of the app — even if we
-were advised such damages were possible.
+## 5. Disclaimer of Warranty
 
-Nothing in this agreement limits liability that cannot lawfully be limited.
+**WinCare Pro is provided "AS IS", without warranty of any kind, express or implied**, including without limitation warranties of merchantability, fitness for a particular purpose, non-infringement, or guaranteed performance speedups. While WinCare Pro measures real hardware metrics and avoids misleading claims, results vary by hardware, workload, and Windows configuration.
 
-## 5. What "asInvoker" means
+## 6. Limitation of Liability
 
-WinCare runs without administrator privileges by default. Only certain actions
-require elevation, and the app asks before elevating. You can decline, and the
-app remains usable for everything that does not need it.
+To the maximum extent permitted by applicable law, the authors and publisher shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or for loss of data, revenue, or configuration arising from use of the software, exceeding the amount you paid for your license. Nothing in this agreement limits liability that cannot lawfully be excluded.
 
-## 6. No warranty that a tool will do anything
+## 7. Open-Source & Runtime Notices
 
-Some tools in this app may not appear to help, and some are arguably
-pointless. Where that is known to be the case — "free RAM", for example — the app
-says so rather than implying a benefit it cannot deliver. This honesty is part
-of the product's design and we ask that it be preserved in any redistribution.
+WinCare Pro is built on Microsoft .NET 10 (`MIT`) and uses `CommunityToolkit.Mvvm` (`MIT`) and `System.Management` (`MIT`).
 
-## 7. Termination
+## 8. Governing Law & Contact
 
-This licence ends if you redistribute the app without this agreement, or if
-you are not the licensed user. It also ends if you modify the app in a way that
-circumvents its safety behaviour.
-
-## 8. Third-party components
-
-WinCare uses CommunityToolkit.Mvvm and System.Management, both MIT licensed.
-The app does not bundle a browser engine or any advertising or analytics SDK.
-
-## 9. No warranty re-export
-
-You may not sell this software, or any derivative of it, as your own work.
-
-## 10. Governing law
-
-This agreement is governed by the laws of the jurisdiction in which the
-publisher is established. *(Fill in before publishing.)*
-
-## 11. Contact
-
-*(Replace with a real contact address before publishing — see `RELEASE.md`.)*
+Governed by the laws of the publisher's principal jurisdiction.
+Support & licensing contact: `support@wincarepro.example` *(replace before public sales)*.

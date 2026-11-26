@@ -6,29 +6,31 @@ using System.IO;
 namespace MakeIcon;
 
 /// <summary>
-/// Generates WinCare Pro's application icon at every size Windows asks for.
-///
+/// Generates WinCare Pro's Option 3 application icon at every size Windows asks for.
 /// </summary>
 /// <remarks>
 /// The icon is committed to the repo rather than generated at build time, so
 /// the build stays reproducible and needs no image tooling on a fresh machine.
 /// This tool exists to regenerate it when the mark changes.
 ///
-/// The design is deliberately the simplest thing that reads at 16x16: a
-/// lightning bolt in the brand teal. Windows renders the exe icon at 16, 24,
-/// 32, 48, 64 and 256 pixels across Explorer, the taskbar, the Start Menu and
-/// Alt-Tab, and anything with fine detail turns to mush at the small end.
-/// A single high-contrast glyph is the only shape that survives all of them.
+/// Option 3 mark: a white security shield with an EvenOdd lightning-bolt cutout
+/// centred on a #0D9488 -> #0F766E -> #134E4A rounded squircle with a subtle
+/// inner rim highlight. The geometry matches the vector Path in MainWindow.xaml.
 /// </remarks>
 internal static class Program
 {
-    private static readonly Color Brand = Color.FromArgb(0x0D, 0x94, 0x88);
-    private static readonly Color BrandDeep = Color.FromArgb(0x0F, 0x76, 0x6E);
+    private static readonly Color BrandBright = Color.FromArgb(0x0D, 0x94, 0x88);
+    private static readonly Color BrandPrimary = Color.FromArgb(0x0F, 0x76, 0x6E);
+    private static readonly Color BrandDeep = Color.FromArgb(0x13, 0x4E, 0x4A);
 
     [STAThread]
     private static int Main(string[] args)
     {
         var outPath = args.Length > 0 ? args[0] : "WinCarePro.ico";
+        var fullOutPath = Path.GetFullPath(outPath);
+        var outDir = Path.GetDirectoryName(fullOutPath) ?? Directory.GetCurrentDirectory();
+        Directory.CreateDirectory(outDir);
+
         string? assetsDir = null;
 
         for (var i = 1; i < args.Length; i++)
@@ -37,7 +39,7 @@ internal static class Program
         }
 
         // The sizes Windows actually requests. 256 is the PNG-compressed
-        // large icon; below that it is BMP.
+        // large icon; below 64 it is BMP.
         int[] sizes = { 16, 24, 32, 48, 64, 128, 256 };
 
         var images = new List<Bitmap>();
@@ -46,21 +48,18 @@ internal static class Program
             var bmp = RenderMark(size, 0f);
             images.Add(bmp);
 
-            // Each frame is stored as a PNG inside the .ico for sizes >= 64.
-            // That is what Windows itself writes, and it keeps the file small
-            // while staying lossless. The PNGs are also written beside the .ico
-            // so the mark can be reviewed at each size without opening a viewer
-            // that understands multi-resolution icons.
+            // Write per-size PNGs beside the .ico so the mark can be reviewed
+            // at each size without opening a multi-resolution icon viewer.
             using (var buffer = new MemoryStream())
             {
                 bmp.Save(buffer, ImageFormat.Png);
-                File.WriteAllBytes($"icon-{size}.png", buffer.ToArray());
+                File.WriteAllBytes(Path.Combine(outDir, $"icon-{size}.png"), buffer.ToArray());
             }
         }
 
         try
         {
-            WriteIco(outPath, images);
+            WriteIco(fullOutPath, images);
             Console.WriteLine($"Wrote {outPath} with {sizes.Length} frames");
         }
         finally
@@ -77,21 +76,16 @@ internal static class Program
     }
 
     /// <summary>
-    /// Draws the mark: a rounded teal plate with a white bolt.
+    /// Draws the Option 3 mark: a rounded teal gradient squircle with subtle
+    /// inner rim and a white shield carrying an EvenOdd bolt cutout.
     /// </summary>
-    /// <param name="size">Canvas edge in pixels. Always square.</param>
-    /// <param name="inset">
-    /// Fraction of the canvas to leave empty on every side. 0 fills the canvas
-    /// edge to edge, which is what taskbar and Alt-Tab want. The Store's
-    /// "Targeted" logos want the mark inset instead, because Windows applies
-    /// its own mask and shadow around it and a full-bleed plate gets clipped.
-    /// </param>
     private static Bitmap RenderMark(int size, float inset)
     {
         var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         g.Clear(Color.Transparent);
 
@@ -104,73 +98,115 @@ internal static class Program
     }
 
     /// <summary>
-    /// Fills a rounded gradient plate and draws the bolt centred inside it.
+    /// Fills a 3-stop rounded gradient squircle, strokes a subtle inner rim,
+    /// and draws the white shield with EvenOdd bolt cutout centred inside it.
     /// </summary>
     private static void DrawPlate(Graphics g, RectangleF plate)
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-        // Rounded square plate. The corner radius is a fraction of the size so
-        // it looks the same at 16px and at 256px.
-        var radius = plate.Width * 0.22f;
+        var radius = plate.Width * 0.225f;
 
-        using (var path = RoundedRect(plate, radius))
+        using (var path = SquirclePath(plate, radius))
+        using (var brush = CreateTealGradient(plate))
         {
-            using var brush = new LinearGradientBrush(plate, Brand, BrandDeep, 55f);
             g.FillPath(brush, path);
         }
 
-        DrawBolt(g, plate);
-    }
-
-    /// <summary>
-    /// The bolt polygon, drawn as a filled path so it scales without blurring.
-    /// </summary>
-    private static void DrawBolt(Graphics g, RectangleF plate)
-    {
-        var pts = new[]
+        // Subtle inner rim highlight so the squircle reads crisply against both
+        // light and dark Windows taskbars and shells.
+        var rimThickness = Math.Max(0.8f, plate.Width * 0.018f);
+        var rimInset = rimThickness * 0.65f;
+        var rimRect = RectangleF.Inflate(plate, -rimInset, -rimInset);
+        var rimRadius = Math.Max(1f, radius - rimInset);
+        if (rimRect.Width > 4f && rimRect.Height > 4f)
         {
-            new PointF(0.56f, 0.13f),
-            new PointF(0.30f, 0.55f),
-            new PointF(0.47f, 0.55f),
-            new PointF(0.42f, 0.88f),
-            new PointF(0.72f, 0.44f),
-            new PointF(0.54f, 0.44f),
-        };
+            using var rimPath = SquirclePath(rimRect, rimRadius);
+            using var rimPen = new Pen(Color.FromArgb(46, 255, 255, 255), rimThickness);
+            g.DrawPath(rimPen, rimPath);
+        }
 
-        var scaled = pts
-            .Select(p => new PointF(
-                plate.X + p.X * plate.Width,
-                plate.Y + p.Y * plate.Height))
-            .ToArray();
-
-        using var bolt = new GraphicsPath();
-        bolt.AddPolygon(scaled);
+        using var shield = BuildShieldWithBoltCutout(plate);
         using var fill = new SolidBrush(Color.White);
-        g.FillPath(fill, bolt);
+        g.FillPath(fill, shield);
+    }
+
+    private static LinearGradientBrush CreateTealGradient(RectangleF rect)
+    {
+        var brush = new LinearGradientBrush(
+            new PointF(rect.Left, rect.Top),
+            new PointF(rect.Right, rect.Bottom),
+            BrandBright,
+            BrandDeep)
+        {
+            WrapMode = WrapMode.TileFlipXY,
+            InterpolationColors = new ColorBlend
+            {
+                Colors = new[] { BrandBright, BrandPrimary, BrandDeep },
+                Positions = new[] { 0f, 0.5f, 1f }
+            }
+        };
+        return brush;
     }
 
     /// <summary>
-    /// Emits the artwork shapes the Microsoft Store requires inside the MSIX
-    /// package.
+    /// Builds the Option 3 shield outer silhouette plus internal lightning-bolt
+    /// cutout on a 24x24 design grid using FillMode.Alternate (EvenOdd).
+    /// Matches MainWindow.xaml's sidebar Path data verbatim:
+    /// F0 M 12,3.2 L 19.2,6 L 19.2,11.4 C 19.2,16 16.1,19.6 12,21 C 7.9,19.6 4.8,16 4.8,11.4 L 4.8,6 Z
+    ///    M 13.4,6.2 L 8.6,12.6 L 11.5,12.6 L 10.6,17.8 L 15.4,11.4 L 12.5,11.4 Z
     /// </summary>
-    /// <remarks>
-    /// Store validates asset names and dimensions at submission time, so these
-    /// are generated rather than hand-drawn: getting one dimension wrong is a
-    /// rejected submission, and there is no useful error message for it.
-    /// </remarks>
+    private static GraphicsPath BuildShieldWithBoltCutout(RectangleF plate)
+    {
+        PointF P(float x, float y) => new(
+            plate.X + (x / 24f) * plate.Width,
+            plate.Y + (y / 24f) * plate.Height);
+
+        var path = new GraphicsPath(FillMode.Alternate);
+
+        // Outer shield figure
+        path.StartFigure();
+        path.AddLine(P(12.0f, 3.2f), P(19.2f, 6.0f));
+        path.AddLine(P(19.2f, 6.0f), P(19.2f, 11.4f));
+        path.AddBezier(
+            P(19.2f, 11.4f),
+            P(19.2f, 16.0f),
+            P(16.1f, 19.6f),
+            P(12.0f, 21.0f));
+        path.AddBezier(
+            P(12.0f, 21.0f),
+            P(7.9f, 19.6f),
+            P(4.8f, 16.0f),
+            P(4.8f, 11.4f));
+        path.AddLine(P(4.8f, 11.4f), P(4.8f, 6.0f));
+        path.CloseFigure();
+
+        // Inner bolt cutout figure (EvenOdd)
+        path.StartFigure();
+        path.AddPolygon(new[]
+        {
+            P(13.4f, 6.2f),
+            P(8.6f, 12.6f),
+            P(11.5f, 12.6f),
+            P(10.6f, 17.8f),
+            P(15.4f, 11.4f),
+            P(12.5f, 11.4f),
+        });
+
+        return path;
+    }
+
+    /// <summary>
+    /// Emits the artwork shapes the Microsoft Store requires inside the MSIX package.
+    /// </summary>
     private static void WriteStoreAssets(string dir)
     {
         Directory.CreateDirectory(dir);
 
-        // Full-bleed squares. Windows does not mask these, so the plate runs to
-        // the canvas edge exactly as the taskbar icon does.
         void Square(string name, int size) =>
             Save(RenderMark(size, 0f), Path.Combine(dir, name));
 
-        // "Targeted" squares. Windows draws its own rounded mask and drop shadow
-        // around these, so the mark is inset and the outside is transparent.
-        // Full bleed here produces a plate with a visible second border.
         void Targeted(string name, int size) =>
             Save(RenderMark(size, 0.14f), Path.Combine(dir, name));
 
@@ -191,7 +227,7 @@ internal static class Program
     }
 
     /// <summary>
-    /// 310x150 transparent banner: mark on the left, wordmark beside it.
+    /// 310x150 transparent banner: Option 3 mark on the left, wordmark beside it.
     /// </summary>
     private static Bitmap RenderWideLogo()
     {
@@ -199,6 +235,7 @@ internal static class Program
         var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
         g.Clear(Color.Transparent);
 
@@ -209,9 +246,6 @@ internal static class Program
         using var font = new Font("Segoe UI Semibold", 30f, FontStyle.Bold, GraphicsUnit.Pixel);
         using var brush = new SolidBrush(Color.FromArgb(0x0F, 0x17, 0x2A));
 
-        // Centred in the space to the right of the mark, not at a fixed offset.
-        // A fixed offset pushed the wordmark off the canvas once the measured
-        // string was wider than the remaining room.
         using var centred = new StringFormat
         {
             Alignment = StringAlignment.Center,
@@ -224,25 +258,19 @@ internal static class Program
     }
 
     /// <summary>
-    /// 620x300 launch image.
+    /// 620x300 launch image with the Option 3 teal gradient and inverted mark.
     /// </summary>
-    /// <remarks>
-    /// Opaque brand fill rather than transparency. The splash is composited by
-    /// the shell on backgrounds this app cannot know in advance, and a
-    /// transparent one either vanishes or turns into dark-grey-on-dark on a
-    /// dark-theme machine.
-    /// </remarks>
     private static Bitmap RenderSplash()
     {
         const int w = 620, h = 300;
         var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
         g.Clear(Color.Transparent);
 
-        using (var bg = new LinearGradientBrush(
-                   new RectangleF(0, 0, w, h), Brand, BrandDeep, 60f))
+        using (var bg = CreateTealGradient(new RectangleF(0, 0, w, h)))
         {
             g.FillRectangle(bg, 0, 0, w, h);
         }
@@ -250,37 +278,22 @@ internal static class Program
         var mark = 104f;
         var plate = new RectangleF((w - mark) / 2f, (h - mark) / 2f - 26, mark, mark);
 
-        // The plate is white on brand teal here, so invert it: a white plate
-        // carrying a brand-coloured bolt, which reads at a glance on launch.
-        using (var path = RoundedRect(plate, mark * 0.22f))
+        // Inverted white squircle carrying the Option 3 shield-with-bolt-cutout in primary teal.
+        using (var path = SquirclePath(plate, mark * 0.225f))
         using (var fill = new SolidBrush(Color.White))
         {
             g.FillPath(fill, path);
         }
 
-        var pts = new[]
+        using (var shield = BuildShieldWithBoltCutout(plate))
+        using (var fill = new SolidBrush(BrandPrimary))
         {
-            new PointF(0.56f, 0.13f), new PointF(0.30f, 0.55f),
-            new PointF(0.47f, 0.55f), new PointF(0.42f, 0.88f),
-            new PointF(0.72f, 0.44f), new PointF(0.54f, 0.44f),
-        };
-        var scaled = pts
-            .Select(p => new PointF(
-                plate.X + p.X * plate.Width, plate.Y + p.Y * plate.Height))
-            .ToArray();
-        using (var bolt = new GraphicsPath())
-        using (var fill = new SolidBrush(Color.FromArgb(0x0F, 0x76, 0x6E)))
-        {
-            bolt.AddPolygon(scaled);
-            g.FillPath(fill, bolt);
+            g.FillPath(fill, shield);
         }
 
         using var font = new Font("Segoe UI Semibold", 30f, FontStyle.Bold, GraphicsUnit.Pixel);
         using var text = new SolidBrush(Color.White);
 
-        // Centre across the full canvas width. Passing a PointF to DrawString
-        // with GenericTypographic anchors the text at that point instead, which
-        // put the wordmark flush against the left edge and clipped it.
         using var centred = new StringFormat
         {
             Alignment = StringAlignment.Center,
@@ -297,44 +310,52 @@ internal static class Program
         using (bmp) bmp.Save(path, ImageFormat.Png);
     }
 
-    private static GraphicsPath RoundedRect(RectangleF r, float radius)
+    /// <summary>
+    /// Smooth cubic-Bezier squircle (continuous-curvature rounded square).
+    /// </summary>
+    private static GraphicsPath SquirclePath(RectangleF r, float radius)
     {
         var path = new GraphicsPath();
-        var d = radius * 2;
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        var k = Math.Min(radius * 1.15f, Math.Min(r.Width, r.Height) * 0.48f);
+        var c = k * 0.55228475f;
+
+        path.StartFigure();
+        path.AddLine(r.Left + k, r.Top, r.Right - k, r.Top);
+        path.AddBezier(
+            r.Right - k, r.Top,
+            r.Right - k + c, r.Top,
+            r.Right, r.Top + k - c,
+            r.Right, r.Top + k);
+        path.AddLine(r.Right, r.Top + k, r.Right, r.Bottom - k);
+        path.AddBezier(
+            r.Right, r.Bottom - k,
+            r.Right, r.Bottom - k + c,
+            r.Right - k + c, r.Bottom,
+            r.Right - k, r.Bottom);
+        path.AddLine(r.Right - k, r.Bottom, r.Left + k, r.Bottom);
+        path.AddBezier(
+            r.Left + k, r.Bottom,
+            r.Left + k - c, r.Bottom,
+            r.Left, r.Bottom - k + c,
+            r.Left, r.Bottom - k);
+        path.AddLine(r.Left, r.Bottom - k, r.Left, r.Top + k);
+        path.AddBezier(
+            r.Left, r.Top + k,
+            r.Left, r.Top + k - c,
+            r.Left + k - c, r.Top,
+            r.Left + k, r.Top);
         path.CloseFigure();
         return path;
     }
 
-    /// <summary>
-    /// Writes a multi-image .ico by hand. GDI+ cannot save one.
-    /// </summary>
-    /// <remarks>
-    /// Written in one pass, and deliberately so. An earlier version wrote the
-    /// image data first and then seeked back to patch the directory offsets,
-    /// which requires knowing every frame's encoded length in advance. That
-    /// assumption was wrong: the .ico directory sits *before* the image data, so
-    /// the first attempt emitted 16-byte frames for everything after the first
-    /// and produced a file Windows could not read at all. Encoding every frame
-    /// into memory first makes the two passes trivially correct.
-    /// </remarks>
     private static void WriteIco(string path, List<Bitmap> images)
     {
-        // Encode every frame up front so both the directory and the data can be
-        // written left to right in a single pass.
         var payloads = new List<byte[]>(images.Count);
 
         foreach (var img in images)
         {
             using var buffer = new MemoryStream();
 
-            // PNG for the larger frames, which is what Windows itself does and
-            // stops the 256px frame from dominating the file size. BMP below
-            // that, because some older shell surfaces will not decode PNG at
-            // small sizes.
             if (img.Width >= 64)
             {
                 img.Save(buffer, ImageFormat.Png);
@@ -365,8 +386,6 @@ internal static class Program
             var img = images[i];
             var data = payloads[i];
 
-            // 0 means 256 in the .ico directory; anything else is the literal
-            // pixel size. Sizes above 255 therefore cannot be expressed.
             w.Write(img.Width >= 256 ? (byte)0 : (byte)img.Width);
             w.Write(img.Height >= 256 ? (byte)0 : (byte)img.Height);
             w.Write((byte)0);      // palette entries
@@ -383,9 +402,6 @@ internal static class Program
         w.Flush();
     }
 
-    /// <summary>
-    /// Encodes a bitmap as the DIB an .ico frame expects.
-    /// </summary>
     private static byte[] ToBmpBytes(Bitmap img)
     {
         using var buffer = new MemoryStream();
@@ -394,7 +410,6 @@ internal static class Program
         var w32 = img.Width;
         var h32 = img.Height;
 
-        // BITMAPINFOHEADER. biHeight is doubled to cover the XOR + AND masks.
         w.Write(40);                       // biSize
         w.Write(w32);                      // biWidth
         w.Write(h32 * 2);                  // biHeight
@@ -405,7 +420,6 @@ internal static class Program
         w.Write(2835); w.Write(2835);      // ppm
         w.Write(0); w.Write(0);            // colours used / important
 
-        // Pixel data, bottom-up, BGRA.
         var rect = new Rectangle(0, 0, w32, h32);
         var data = img.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         var rowBytes = w32 * 4;
@@ -419,9 +433,6 @@ internal static class Program
         }
         img.UnlockBits(data);
 
-        // AND mask: one bit per pixel, rows padded to 4 bytes. All zero means
-        // fully opaque, which is correct for this design since the plate is
-        // drawn as an anti-aliased path and already carries the alpha.
         var maskStride = ((w32 + 31) / 32) * 4;
         var mask = new byte[maskStride * h32];
         w.Write(mask);

@@ -59,6 +59,7 @@ public class StorageCleanupService
     /// <returns>Bytes reclaimed, or -1 when it could not be done.</returns>
     public long EmptyRecycleBin()
     {
+        SafetyMode.RequireMutationAllowed();
         try
         {
             // Shell.Application works without elevation and honours per-user
@@ -95,6 +96,7 @@ public class StorageCleanupService
     /// <returns>Bytes removed, or -1 on failure.</returns>
     public long ClearWindowsUpdateCache()
     {
+        SafetyMode.RequireMutationAllowed();
         var before = GetWindowsUpdateCacheSize();
         if (!Directory.Exists(WindowsUpdateCache)) return 0;
 
@@ -124,6 +126,7 @@ public class StorageCleanupService
     /// </remarks>
     public (bool Success, string Output) RunDismComponentCleanup(int timeoutMs = 900_000)
     {
+        SafetyMode.RequireMutationAllowed();
         var result = _svc.RunProcessPublic(
             "dism.exe",
             "/Online /Cleanup-Image /StartComponentCleanup /NoRestart",

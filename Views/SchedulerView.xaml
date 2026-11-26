@@ -23,7 +23,7 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="Automatic Maintenance Scheduler" FontWeight="SemiBold"
                                FontSize="16" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
-                    <TextBlock Text="Run silent background tune-ups automatically so your PC stays fast without manual effort."
+                    <TextBlock Text="Runs only while WinCare is open. Fresh consent each session; no Windows task is registered."
                                FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource Success}"
                                FontWeight="SemiBold" Margin="0,6,0,0" />
@@ -31,6 +31,7 @@
 
                 <!-- Enable/Disable Master Switch -->
                 <Button Grid.Column="1" Command="{Binding ToggleEnabledCommand}"
+                        AutomationProperties.Name="Toggle session maintenance scheduler"
                         Padding="18,10" VerticalAlignment="Center"
                         Background="{Binding Config.IsEnabled, Converter={x:Static vm:BooleanToPrimaryBrushConverter.Instance}}">
                     <TextBlock Text="{Binding Config.IsEnabled, Converter={x:Static vm:BooleanToEnabledTextConverter.Instance}}"
@@ -52,8 +53,7 @@
                                      GroupName="Freq" Margin="0,0,24,0" VerticalAlignment="Center" />
                         <RadioButton Content="Weekly" IsChecked="{Binding Config.Frequency, Converter={x:Static vm:StringEqualsConverter.Instance}, ConverterParameter='Weekly'}"
                                      GroupName="Freq" Margin="0,0,24,0" VerticalAlignment="Center" />
-                        <RadioButton Content="At Windows Startup" IsChecked="{Binding Config.Frequency, Converter={x:Static vm:StringEqualsConverter.Instance}, ConverterParameter='OnStartup'}"
-                                     GroupName="Freq" VerticalAlignment="Center" />
+                        <TextBox Text="{Binding Config.TimeOfDay, UpdateSourceTrigger=PropertyChanged}" Width="70" ToolTip="Local time HH:mm" />
                     </StackPanel>
 
                     <TextBlock Text="Actions Included in Maintenance" FontSize="14" FontWeight="SemiBold"
@@ -62,21 +62,21 @@
                     <!-- Tasks Checklist -->
                     <Border Background="{DynamicResource SurfaceHover}" CornerRadius="8" Padding="16" Margin="0,0,0,20">
                         <StackPanel>
-                            <CheckBox Content="Clean Temporary Files, Windows Logs &amp; Error Dumps"
-                                      IsChecked="{Binding Config.CleanTempFiles}" Margin="0,0,0,12" />
-                            <CheckBox Content="Automatically Empty Windows Recycle Bin"
-                                      IsChecked="{Binding Config.EmptyRecycleBin}" Margin="0,0,0,12" />
-                            <CheckBox Content="Trim Standby Memory &amp; Reclaim Inactive RAM"
-                                      IsChecked="{Binding Config.OptimizeRam}" Margin="0,0,0,12" />
-                            <CheckBox Content="Flush Stale DNS Resolver Cache"
-                                      IsChecked="{Binding Config.FlushDns}" />
+                            <CheckBox Content="Clean top-level user TEMP files older than 7 days" IsChecked="{Binding Config.CleanTempFiles}" Margin="0,0,0,12" />
+                            <TextBlock Text="Permanent deletion: at most 100 files / 100 MiB / 15 seconds. No subfolders, Recycle Bin, RAM, DNS or system caches. After sleep, at most one due attempt runs; weekly repeats every 7 days after the first scheduled run." TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" />
                         </StackPanel>
                     </Border>
 
                     <!-- Save Action -->
                     <Button Style="{DynamicResource PrimaryButton}"
-                            Content="💾 Save Automation Preferences" Command="{Binding SaveSettingsCommand}"
-                            HorizontalAlignment="Left" Padding="20,10" />
+                            AutomationProperties.Name="Save automation preferences"
+                            Command="{Binding SaveSettingsCommand}"
+                            HorizontalAlignment="Left" Padding="20,10">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE74E;" FontFamily="{DynamicResource IconFont}" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Save Automation Preferences" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </ScrollViewer>
         </Border>

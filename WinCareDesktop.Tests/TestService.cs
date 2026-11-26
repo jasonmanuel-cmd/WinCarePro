@@ -18,7 +18,7 @@ namespace WinCareDesktop.Tests;
 internal static class TestService
 {
     public static SystemOptimizerService New() =>
-        new(new HistoryStore(NewHistoryPath()));
+        new(new HistoryStore(NewHistoryPath())) { CleanupRoots = new[] { Path.GetTempPath() } };
 
     public static string NewHistoryPath()
     {

@@ -29,10 +29,22 @@
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{DynamicResource PrimaryButton}"
-                                Content="📶 Test Latency" Command="{Binding TestPingCommand}"
-                                Padding="14,8" Margin="0,0,8,0" />
-                        <Button Content="🧹 Flush DNS Cache" Command="{Binding FlushDnsCommand}"
-                                Padding="14,8" />
+                                AutomationProperties.Name="Test network latency"
+                                Command="{Binding TestPingCommand}"
+                                Padding="14,8" Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xEC3F;" FontFamily="{DynamicResource IconFont}" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="Test Latency" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding FlushDnsCommand}"
+                                AutomationProperties.Name="Flush Windows DNS cache"
+                                Padding="14,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE72C;" FontFamily="{DynamicResource IconFont}" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="Flush DNS Cache" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -88,11 +100,14 @@
             <!-- ══ HIGH SPEED DNS RESOLVERS ══════════════════════════════ -->
             <Border Style="{DynamicResource Card}" Padding="16">
                 <StackPanel>
-                    <TextBlock Text="One-Click Secure DNS Resolver Switching" FontSize="14" FontWeight="SemiBold"
+                    <TextBlock Text="IPv4 DNS — explicit adapter selection" FontSize="14" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
-                    <TextBlock Text="Switching from ISP default DNS to an encrypted, high-performance resolver improves web browsing speed and stops DNS snooping."
+                    <TextBlock Text="Changes IPv4 DNS server addresses only, not encryption. IPv6 is untouched. Previous automatic/static configuration is retained for undo."
                                FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,12" />
 
+                    <ComboBox ItemsSource="{Binding Interfaces}" SelectedItem="{Binding SelectedAdapter}"
+                              AutomationProperties.Name="Select network adapter for IPv4 DNS"
+                              DisplayMemberPath="Name" Margin="0,0,0,12" ToolTip="Choose the adapter to change" />
                     <ItemsControl ItemsSource="{Binding DnsResolvers}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -119,6 +134,7 @@
                                         </Border>
 
                                         <Button Grid.Column="2" Content="Apply DNS"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Apply {0} IPv4 DNS}"
                                                 Command="{Binding DataContext.SwitchDnsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 Padding="12,6" HorizontalAlignment="Right" VerticalAlignment="Center" />

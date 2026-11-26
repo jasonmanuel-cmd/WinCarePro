@@ -18,17 +18,25 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     public SystemOptimizerService Service => _svc;
 
-    [ObservableProperty] private double _score;
-    [ObservableProperty] private double _ramPercent;
-    [ObservableProperty] private double _storagePercent;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ScoreDisplay))] private double _score;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(RamUsageText), nameof(ScoreDisplay))] private double _ramPercent;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(StorageUsageText), nameof(ScoreDisplay))] private double _storagePercent;
     [ObservableProperty] private double _batteryPercent = -1;
     [ObservableProperty] private double _reclaimedGb;
     [ObservableProperty] private int _trackersBlocked;
     [ObservableProperty] private string _activeDns = "System default";
     [ObservableProperty] private bool _isOptimizing;
     [ObservableProperty] private string _statusMessage = "System ready.";
-    [ObservableProperty] private double _totalRamGb;
-    [ObservableProperty] private double _freeStorageGb;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(RamUsageText), nameof(ScoreDisplay), nameof(RamCapacityText))] private double _totalRamGb;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(RamCapacityText))] private double _availableRamGb;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(StorageCapacityText))] private double _freeStorageGb;
+
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(StorageUsageText), nameof(ScoreDisplay), nameof(StorageCapacityText))] private double _totalStorageGb;
+    public string RamUsageText => TotalRamGb > 0 && DashboardGuidance.ValidPercent(RamPercent) ? $"{RamPercent:F0}%" : "Unknown";
+    public string StorageUsageText => TotalStorageGb > 0 && DashboardGuidance.ValidPercent(StoragePercent) ? $"{StoragePercent:F0}%" : "Unknown";
+    public string ScoreDisplay => RamUsageText == "Unknown" || StorageUsageText == "Unknown" ? "—" : $"{Score:F0}%";
+    public string RamCapacityText => TotalRamGb > 0 ? $"Installed: {TotalRamGb:F1} GB • {AvailableRamGb:F1} GB available" : "RAM capacity unavailable";
+    public string StorageCapacityText => TotalStorageGb > 0 ? $"Free space: {FreeStorageGb:F1} GB" : "Drive capacity unavailable";
 
     [ObservableProperty] private double _cpuPercent = -1;
     [ObservableProperty] private string _uptimeText = "—";
@@ -38,6 +46,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private ViewModelBase _currentView = null!;
     public ObservableCollection<NavigationItem> NavigationItems { get; } = new();
 
+    public MemoryViewModel MemoryVM { get; } = new();
+    public DefenderViewModel DefenderVM { get; } = new();
+    public OptionsViewModel OptionsVM { get; } = new();
     public DashboardViewModel DashboardVM { get; }
     public DiskAnalyzerViewModel DiskAnalyzerVM { get; }
     public StartupManagerViewModel StartupManagerVM { get; }
@@ -81,24 +92,43 @@ public partial class MainViewModel : ObservableObject
     {
         // Initialize child ViewModels
         DashboardVM = new DashboardViewModel(this);
-        DiskAnalyzerVM = new DiskAnalyzerViewModel();
-        StartupManagerVM = new StartupManagerViewModel();
-        AppUninstallVM = new AppUninstallViewModel();
+        DiskAnalyzerVM = new DiskAnalyzerViewModel { History = _svc, OnHistoryRecorded = LoadUndoHistory };
+        StartupManagerVM = new StartupManagerViewModel { History = _svc, OnHistoryRecorded = LoadUndoHistory };
+        AppUninstallVM = new AppUninstallViewModel { History = _svc };
         PrivacyVM = new PrivacyViewModel(this);
         NetworkMonitorVM = new NetworkMonitorViewModel(this);
         SchedulerVM = new SchedulerViewModel();
         HistoryLogsVM = new HistoryLogsViewModel(this);
 
-        // Build navigation menu
-        var dashboardNav = new NavigationItem("Dashboard", "📊", "System overview & health", DashboardVM) { IsSelected = true };
+        MemoryVM.NavigateToPanel = panel =>
+        {
+            var target = NavigationItems.FirstOrDefault(n => n.Title == panel);
+            if (target != null) Navigate(target);
+        };
+        DefenderVM.NavigateToStartupApps = () =>
+        {
+            var target = NavigationItems.FirstOrDefault(n => n.Title == "Startup Apps");
+            if (target != null) Navigate(target);
+        };
+        MemoryVM.TrimSelfWorkingSet = () =>
+        {
+            FlushRamStandby();
+            return _svc.LogStream.LastOrDefault() ?? "Trimmed WinCare's working set.";
+        };
+
+        // Build navigation menu (uniform MDL2/Fluent glyphs, Options at bottom)
+        var dashboardNav = new NavigationItem("Dashboard", "\uE9D9", "System overview & health", DashboardVM) { IsSelected = true };
         NavigationItems.Add(dashboardNav);
-        NavigationItems.Add(new NavigationItem("Disk Analyzer", "💾", "Large file visualizer", DiskAnalyzerVM));
-        NavigationItems.Add(new NavigationItem("Startup Apps", "🚀", "Boot speed manager", StartupManagerVM));
-        NavigationItems.Add(new NavigationItem("App Remover", "📦", "Uninstall software & bloat", AppUninstallVM));
-        NavigationItems.Add(new NavigationItem("Privacy Shield", "🛡️", "Windows telemetry blocker", PrivacyVM));
-        NavigationItems.Add(new NavigationItem("Network & DNS", "🌐", "Traffic & secure DNS", NetworkMonitorVM));
-        NavigationItems.Add(new NavigationItem("Auto-Clean", "🕒", "Scheduled maintenance", SchedulerVM));
-        NavigationItems.Add(new NavigationItem("History & Logs", "📜", "Undo history & live logs", HistoryLogsVM));
+        NavigationItems.Add(new NavigationItem("Memory & Apps", "\uE950", "Sample resource demand", MemoryVM));
+        NavigationItems.Add(new NavigationItem("Defender", "\uEA18", "Protection status & next steps", DefenderVM));
+        NavigationItems.Add(new NavigationItem("Disk Analyzer", "\uEDA2", "Large file visualizer", DiskAnalyzerVM));
+        NavigationItems.Add(new NavigationItem("Startup Apps", "\uEC4A", "Boot speed manager", StartupManagerVM));
+        NavigationItems.Add(new NavigationItem("App Remover", "\uE7B8", "Uninstall software & bloat", AppUninstallVM));
+        NavigationItems.Add(new NavigationItem("Privacy Shield", "\uE72E", "Two Windows privacy settings", PrivacyVM));
+        NavigationItems.Add(new NavigationItem("Network & DNS", "\uE774", "Traffic & IPv4 DNS", NetworkMonitorVM));
+        NavigationItems.Add(new NavigationItem("Auto-Clean", "\uE823", "Scheduled maintenance", SchedulerVM));
+        NavigationItems.Add(new NavigationItem("History & Logs", "\uE81C", "Undo history & live logs", HistoryLogsVM));
+        NavigationItems.Add(new NavigationItem("Options", "\uE713", "Lightweight app preferences", OptionsVM));
 
         CurrentView = DashboardVM;
 
@@ -142,19 +172,24 @@ public partial class MainViewModel : ObservableObject
 
     public void TogglePrivacyShield(string shieldName, bool enabled)
     {
-        if (_svc.ApplyPrivacySetting(shieldName, enabled))
-            TrackersBlocked = CountEnabledShields();
+        var ok = _svc.ApplyPrivacySetting(shieldName, enabled);
+        RefreshPrivacyState();
+        LoadUndoHistory();
+        StatusMessage = ok ? "Privacy setting verified." : "Privacy change failed; see event log.";
         RefreshStats();
+    }
+
+    public void RefreshPrivacyState()
+    {
+        foreach (var shield in Shields)
+            shield.Blocked = _svc.ReadPrivacyState(shield.Name);
+        TrackersBlocked = CountEnabledShields();
     }
 
     private void LoadPrivacyFromSystem()
     {
-        var adOff = _svc.ReadAdvertisingIdBlocked();
-        var tailoredOff = _svc.ReadTailoredExperiencesOff();
-        Shields.Add(new PrivacyShield { Name = "Advertising ID", Enabled = adOff });
-        Shields.Add(new PrivacyShield { Name = "User Telemetry", Enabled = tailoredOff });
-        Shields.Add(new PrivacyShield { Name = "Diagnostic Data", Enabled = tailoredOff });
-        Shields.Add(new PrivacyShield { Name = "Background Tracking", Enabled = adOff });
+        Shields.Add(new PrivacyShield { Name = "Advertising ID", Blocked = _svc.ReadPrivacyState("Advertising ID") });
+        Shields.Add(new PrivacyShield { Name = "Tailored Experiences", Blocked = _svc.ReadPrivacyState("Tailored Experiences") });
         TrackersBlocked = CountEnabledShields();
     }
 
@@ -179,22 +214,36 @@ public partial class MainViewModel : ObservableObject
     private void ToggleShield(PrivacyShield? shield)
     {
         if (shield == null) return;
-        shield.Enabled = !shield.Enabled;
-        TogglePrivacyShield(shield.Name, shield.Enabled);
+        TogglePrivacyShield(shield.Name, !shield.Enabled);
     }
 
     public void RefreshStats()
     {
-        var stats = _svc.GetRamAndStorageStats();
-        RamPercent = Math.Round(stats.usedPercent, 1);
+        var ram = _svc.GetRamStats();
         var storage = _svc.GetStorageStats();
-        StoragePercent = Math.Round(storage.usedPercent, 1);
-        TotalRamGb = Math.Round(stats.totalBytes / 1_073_741_824.0, 1);
-        FreeStorageGb = Math.Round(storage.totalGb - storage.usedGb, 1);
+        var battery = _svc.GetBatteryPercent();
+        ApplyStatsSnapshot(ram, storage, battery);
+    }
 
-        // -1 means "no battery present", which is what a desktop reports.
-        // The old code coerced that to 100 and displayed a fake charge.
-        BatteryPercent = _svc.GetBatteryPercent();
+    public async Task RefreshStatsAsync()
+    {
+        var (ram, storage, battery) = await Task.Run(() =>
+            (_svc.GetRamStats(), _svc.GetStorageStats(), _svc.GetBatteryPercent()));
+        ApplyStatsSnapshot(ram, storage, battery);
+    }
+
+    private void ApplyStatsSnapshot(
+        (double usedPercent, long totalBytes, long availableBytes) ram,
+        (double usedPercent, double usedGb, double totalGb) storage,
+        double batteryPercent)
+    {
+        RamPercent = Math.Round(ram.usedPercent, 1);
+        StoragePercent = Math.Round(storage.usedPercent, 1);
+        TotalStorageGb = storage.totalGb;
+        TotalRamGb = Math.Round(ram.totalBytes / 1_073_741_824.0, 1);
+        AvailableRamGb = Math.Round(ram.availableBytes / 1_073_741_824.0, 1);
+        FreeStorageGb = Math.Round(storage.totalGb - storage.usedGb, 1);
+        BatteryPercent = batteryPercent;
 
         Score = ComputeScore();
         HealthScoreChanged?.Invoke(Score);
@@ -232,7 +281,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var p in procs) TopProcesses.Add(p);
             TopMemoryText = procs.Count == 0
                 ? "—"
-                : string.Join("  ·  ", procs.Take(3).Select(p => $"{p.Name} {p.WorkingSetMb * 1024:F0} MB"));
+                : string.Join("  ·  ", procs.Take(3).Select(p => $"{p.Name} {p.WorkingSetMb:F0} MB"));
         }
         catch (Exception ex)
         {
@@ -283,65 +332,44 @@ public partial class MainViewModel : ObservableObject
         return (100 - usedPercent) / (100 - comfort) * 100.0;
     }
 
+    public Func<IReadOnlyCollection<CleanupCandidate>, bool> ConfirmCleanup { get; set; } = items =>
+    {
+        if (SafetyMode.Enabled) return false;
+        var files = items.SelectMany(c => c.IsDirectory ? c.Snapshot ?? new() : new List<CleanupCandidate> { c }).ToList();
+        var window = new Window { Title = "Review exact cleanup snapshot — permanent deletion", Width = 750, Height = 550, WindowStartupLocation = WindowStartupLocation.CenterScreen };
+        var panel = new System.Windows.Controls.DockPanel { Margin = new Thickness(16) };
+        var actions = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var cancel = new System.Windows.Controls.Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(16, 8, 16, 8), Margin = new Thickness(8) };
+        var apply = new System.Windows.Controls.Button { Content = $"Delete {files.Count} previewed files", Padding = new Thickness(16, 8, 16, 8), Margin = new Thickness(8) };
+        apply.Click += (_, _) => window.DialogResult = true;
+        actions.Children.Add(cancel); actions.Children.Add(apply); System.Windows.Controls.DockPanel.SetDock(actions, System.Windows.Controls.Dock.Bottom); panel.Children.Add(actions);
+        panel.Children.Add(new System.Windows.Controls.TextBox { Text = $"Estimated bytes: {files.Sum(f => f.Bytes)}. Locked/changed files are skipped. No RAM or DNS changes. Files cannot be restored.\n\n" + string.Join("\n", files.Select(f => f.Path + " — " + f.Bytes + " bytes")), IsReadOnly = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto });
+        window.Content = panel;
+        return window.ShowDialog() == true;
+    };
+
     [RelayCommand]
     private async Task RunOptimizationAsync(object? candidates)
     {
         if (IsOptimizing) return;
         IsOptimizing = true;
-        StatusMessage = "Running optimization...";
-        Log("═ STARTING FULL OPTIMIZATION ═", "system");
-
         try
         {
-            StatusMessage = "Scanning temp folders…";
-
-            // Everything below is blocking I/O. Running it on the UI thread froze the
-            // window for the whole operation.
-            //
-            // candidates is the preview the user actually saw. When null we scan
-            // first, so the one-tap button still works standalone.
-            var target = candidates as IReadOnlyCollection<CleanupCandidate>
-                         ?? await Task.Run(ScanCleanupAndReturn);
-            var reclaimedBytes = await Task.Run(() => _svc.CleanTempAndCache(target));
-
-            Log("Flushing standby memory...", "system");
-            await Task.Run(() => _svc.FlushStandbyMemory());
-            await Task.Run(() => _svc.FlushDnsCache());
-
-            var reclaimedGb = Math.Round(reclaimedBytes / 1_073_741_824.0, 2);
-
-            // Deleting files cannot be undone, so this is recorded honestly as
-            // DisplayOnly rather than advertising a fake "Revert".
-            var tx = new OptimizationTransaction
-            {
-                Title = "1-Tap Optimization",
-                Description = $"Cleared {reclaimedGb} GB from temp folders, flushed standby memory and DNS cache.",
-                Time = DateTime.Now,
-                Kind = UndoKind.DisplayOnly,
-                PreviousScore = Score,
-                PreviousRam = RamPercent,
-                PreviousStorage = StoragePercent,
-                ReclaimedGb = reclaimedGb
-            };
-
-            ReclaimedGb += reclaimedGb;
-            await Task.Run(RefreshStats);
-
-            UndoHistory.Insert(0, tx);
-            _svc.PushUndoTransaction(tx);
-
-            Log($"Optimization complete. Score: {Score:F0}/100. Reclaimed {reclaimedGb} GB.", "success");
-            StatusMessage = $"Optimization complete. +{reclaimedGb} GB reclaimed.";
+            StatusMessage = "Preparing read-only cleanup preview...";
+            var target = candidates as IReadOnlyCollection<CleanupCandidate> ?? await Task.Run(ScanCleanupAndReturn);
+            if (!ConfirmCleanup(target)) { StatusMessage = "Cleanup cancelled; no files changed."; return; }
+            StatusMessage = "Deleting only unchanged previewed files...";
+            var bytes = await Task.Run(() => _svc.CleanTempAndCache(target));
+            var gb = bytes / 1_073_741_824.0;
+            ReclaimedGb += gb;
+            StatusMessage = $"Cleanup: {bytes} bytes deleted; {_svc.LastCleanupErrors} errors/skips. Empty directories retained.";
+            _svc.PushUndoTransaction(new OptimizationTransaction { Title = "Confirmed temporary-file cleanup", Description = StatusMessage, Kind = UndoKind.DisplayOnly, ReclaimedGb = gb, Time = DateTime.Now });
+            LoadUndoHistory();
+            RefreshStats();
+            Log(StatusMessage, _svc.LastCleanupErrors == 0 ? "success" : "warning");
         }
-        catch (Exception ex)
-        {
-            Log($"Optimization error: {ex.Message}", "warning");
-            StatusMessage = "Optimization encountered an error.";
-        }
-        finally
-        {
-            IsOptimizing = false;
-        }
+        catch (Exception ex) { StatusMessage = "Cleanup incomplete: " + ex.Message; Log(StatusMessage, "warning"); }
+        finally { IsOptimizing = false; }
     }
 
     [RelayCommand]
@@ -354,32 +382,15 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void UninstallApp(BloatwareApp? app)
+    private async Task UninstallApp(BloatwareApp? app)
     {
         if (app == null) return;
-        Log($"Uninstalling: {app.Name}...", "system");
-        var success = _svc.UninstallApp(app.Package, app.Name);
-        if (success)
-        {
-            BloatwareApps.Remove(app);
-
-            // This one IS genuinely reversible: we re-register the package
-            // from its install location on revert.
-            var tx = new OptimizationTransaction
-            {
-                Title = $"Purged {app.Name}",
-                Description = $"Uninstalled {app.Package}. Reason: {app.Reason}",
-                Time = DateTime.Now,
-                Kind = UndoKind.ReinstallApp,
-                UndoPayload = app.Id,
-                PreviousScore = Score,
-                PreviousRam = RamPercent,
-                PreviousStorage = StoragePercent
-            };
-            UndoHistory.Insert(0, tx);
-            _svc.PushUndoTransaction(tx);
-            Log($"Uninstalled {app.Name}.", "success");
-        }
+        AppUninstallVM.DisplayedApps.Clear();
+        AppUninstallVM.DisplayedApps.Add(new SelectableApp(new InstalledProgram { Name = app.Name, Kind = UninstallKind.Appx, PackageFullName = app.Package }) { IsSelected = true });
+        await AppUninstallVM.UninstallSelectedAsync();
+        if (AppUninstallVM.DisplayedApps.Count == 0) BloatwareApps.Remove(app);
+        LoadUndoHistory();
+        StatusMessage = AppUninstallVM.StatusText;
     }
 
     [RelayCommand]
@@ -391,12 +402,8 @@ public partial class MainViewModel : ObservableObject
         {
             // Previously this silently rewrote the displayed numbers and logged
             // "Reverted", implying files came back. They cannot. Be explicit.
-            LastRevertMessage = "This action was recorded for history only and cannot be reversed. " +
-                                "Only the recorded score history was rolled back.";
-            UndoHistory.Remove(tx);
-            _svc.RemoveUndoTransaction(tx);
-            RefreshStats();
-            Log($"Dismissed {tx.Title}: {LastRevertMessage}", "warning");
+            LastRevertMessage = "This history record is not safely reversible. No system state was changed; record retained.";
+            Log(LastRevertMessage, "warning");
             return;
         }
 
@@ -472,7 +479,7 @@ public partial class MainViewModel : ObservableObject
         Log("Flushing RAM standby buffer...", "system");
         _svc.FlushStandbyMemory();
         RefreshStats();
-        Log("RAM standby flushed.", "success");
+        Log(_svc.LogStream.LastOrDefault() ?? "Working-set trim finished; see log.");
     }
 
     [RelayCommand]

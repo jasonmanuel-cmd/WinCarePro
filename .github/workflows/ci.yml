@@ -11,12 +11,26 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+
 jobs:
   build-and-test:
-    # Windows, because this is a WPF app: net8.0-windows with UseWPF will not
+    # Windows, because this is a WPF app: net10.0-windows with UseWPF will not
     # restore on Linux, and the UI tests construct a real Window on an STA
     # thread. A Linux runner would fail for reasons unrelated to the change.
     runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      WINCARE_SAFE_MODE: '1'
+      WINCARE_DATA_ROOT: ${{ runner.temp }}/wincare-data
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
 
     steps:
       - uses: actions/checkout@v4
@@ -24,15 +38,12 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          global-json-file: global.json
 
-      # Keep the WPF designer out of the way and stop NuGet writing to a
-      # machine-global packages folder, which is not writable on hosted runners.
-      - name: Environment
+      - name: Prepare isolated scratch and reports
+        shell: pwsh
         run: |
-          $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-          $env:DOTNET_NOLOGO = '1'
-          $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
+          New-Item -ItemType Directory -Force -Path $env:TEMP, '${{ runner.temp }}/wincare-reports' | Out-Null
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -50,18 +61,33 @@ jobs:
       # console deadlocks the runner.
       - name: Test
         run: |
-          $log = "test-output.log"
+          $log = '${{ runner.temp }}/wincare-reports/test-output.log'
           dotnet test WinCareDesktop.Tests\WinCareDesktop.Tests.csproj `
-            -c Release --nologo -v quiet *>&1 | Tee-Object -FilePath $log | Out-Null
+            -c Release --nologo -v quiet --logger "trx;LogFileName=application.trx" `
+            --results-directory '${{ runner.temp }}/wincare-reports' *>&1 | Tee-Object -FilePath $log | Out-Null
+          $testExit = $LASTEXITCODE
           Get-Content $log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($testExit -ne 0) { exit $testExit }
+
+      - name: Inert packaging regressions
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $log = '${{ runner.temp }}/wincare-reports/packaging-output.log'
+          # Child process confines mock tools and fake signing environment.
+          pwsh -NoLogo -NoProfile -NonInteractive -File packaging/Test-Packaging.ps1 `
+            -ScratchRoot '${{ runner.temp }}/wincare-scratch' *>&1 | Tee-Object -FilePath $log | Out-Null
+          $packagingExit = $LASTEXITCODE
+          Get-Content $log
+          if ($packagingExit -ne 0) { exit $packagingExit }
 
       # The tests build a real MainWindow and the render harness needs WPF, so
       # this is the cheapest way to prove the publish path still works.
       - name: Publish
-        run: dotnet publish WinCareDesktop.csproj -c Release -r win-x64 `
-          --self-contained true -p:PublishSingleFile=true `
-          -o publish --nologo -v minimal
+        run: |
+          dotnet publish WinCareDesktop.csproj -c Release -r win-x64 `
+            --self-contained true -p:PublishSingleFile=true `
+            -o publish --nologo -v minimal
 
       - name: Verify single-file output
         shell: pwsh
@@ -75,7 +101,7 @@ jobs:
       # offscreen render harness only runs on Windows. Here it runs headless.
       - name: Render every panel offscreen
         run: |
-          $log = "render-output.log"
+          $log = '${{ runner.temp }}/wincare-reports/render-output.log'
           dotnet run --project Tools\RenderShots -c Release -- *>&1 |
             Tee-Object -FilePath $log | Out-Null
           Get-Content $log
@@ -85,6 +111,18 @@ jobs:
           if ($shots.Count -lt 12) {
             throw "expected at least 12 screenshots, got $($shots.Count)"
           }
+
+      - name: Retain test and fixture evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-and-packaging-evidence
+          path: |
+            ${{ runner.temp }}/wincare-reports/**
+            ${{ runner.temp }}/wincare-scratch/packaging-*/**/candidate.json
+            ${{ runner.temp }}/wincare-scratch/packaging-*/**/*manifest*.json
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Upload screenshots
         if: always()
@@ -108,18 +146,34 @@ jobs:
 
   security:
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          global-json-file: global.json
 
-      # The app takes no input from a network, so there is no Web surface to
-      # scan. Dependency advisories are the remaining real risk.
-      - name: List vulnerable packages
-        run: dotnet list package --vulnerable --include-transitive
+      - name: Verify audit fail-closed policy with inert warnings
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path '${{ runner.temp }}/wincare-audit' | Out-Null
+          pwsh -NoLogo -NoProfile -NonInteractive -File ci/Test-DependencyAudit.ps1 `
+            -ScratchRoot '${{ runner.temp }}' *>&1 |
+            Tee-Object -FilePath '${{ runner.temp }}/wincare-audit/policy-tests.log' | Out-Null
+          $policyExit = $LASTEXITCODE
+          Get-Content '${{ runner.temp }}/wincare-audit/policy-tests.log'
+          if ($policyExit -ne 0) { exit $policyExit }
 
-      - name: Warn on outdated direct dependencies
-        continue-on-error: true
-        run: dotnet list package --outdated
+      - name: Restore and audit all project dependencies (fail closed)
+        shell: pwsh
+        run: ./ci/Invoke-DependencyAudit.ps1 -ReportsDirectory '${{ runner.temp }}/wincare-audit'
+
+      - name: Retain dependency audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-evidence
+          path: ${{ runner.temp }}/wincare-audit/**
+          retention-days: 14
+          if-no-files-found: warn

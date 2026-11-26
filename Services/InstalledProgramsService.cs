@@ -195,6 +195,8 @@ public class InstalledProgramsService
     private static bool TryExtractMsiProductCode(InstalledProgram program, out string code)
     {
         code = "";
+        var match = System.Text.RegularExpressions.Regex.Match(program.UninstallString + " " + program.QuietUninstallString + " " + program.KeyPath, @"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}");
+        if (match.Success) { code = match.Value; return true; }
         using var hiveKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
         using var key = hiveKey.OpenSubKey(SubPath(program.KeyPath));
         var guid = key?.GetValue("ProductCode") as string;

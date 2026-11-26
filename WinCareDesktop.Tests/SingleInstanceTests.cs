@@ -15,6 +15,16 @@ namespace WinCareDesktop.Tests;
 public class SingleInstanceTests
 {
     [Fact]
+    public void Safe_mode_mutex_is_scoped_without_exposing_the_data_path()
+    {
+        var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+        var name = (string?)(typeof(SingleInstance).GetProperty("MutexName", flags)?.GetValue(null)
+            ?? typeof(SingleInstance).GetField("MutexName", flags)?.GetValue(null));
+        Assert.StartsWith(@"Local\WinCarePro.Verification.", name);
+        Assert.DoesNotContain(Environment.GetEnvironmentVariable("WINCARE_DATA_ROOT")!, name);
+    }
+
+    [Fact]
     public void First_acquire_succeeds_and_release_is_safe()
     {
         // This test class runs alongside the process-level tests, so the mutex

@@ -15,13 +15,18 @@ public partial class PrivacyViewModel : ViewModelBase
     private int _blockedCount;
 
     [ObservableProperty]
-    private string _statusText = "Privacy shields active.";
+    private string _statusText = "Only verified off settings count as protected. Unknown means unreadable, absent or unsupported.";
 
     public PrivacyViewModel(MainViewModel main)
     {
         _main = main;
+        Shields.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems != null) foreach (PrivacyShield shield in e.NewItems) shield.PropertyChanged += (_, _) => UpdateCount();
+            UpdateCount();
+        };
         Title = "Windows Privacy Shield";
-        Subtitle = "Prevent Windows from collecting diagnostic telemetry, location data, and advertising identifiers";
+        Subtitle = "Control the current-user advertising ID and tailored experiences; this does not disable Windows telemetry";
         UpdateCount();
     }
 
@@ -37,7 +42,7 @@ public partial class PrivacyViewModel : ViewModelBase
         var newStatus = !shield.Enabled;
         _main.TogglePrivacyShield(shield.Name, newStatus);
         UpdateCount();
-        StatusText = $"{shield.Name} is now {(newStatus ? "Protected" : "Default")}.";
+        StatusText = _main.StatusMessage;
     }
 
     [RelayCommand]
@@ -48,7 +53,7 @@ public partial class PrivacyViewModel : ViewModelBase
             if (!s.Enabled) _main.TogglePrivacyShield(s.Name, true);
         }
         UpdateCount();
-        StatusText = "All privacy protections enabled.";
+        StatusText = $"{BlockedCount} of {Shields.Count} settings verified off. Review history/log for failures.";
     }
 
     [RelayCommand]
@@ -56,9 +61,9 @@ public partial class PrivacyViewModel : ViewModelBase
     {
         foreach (var s in Shields)
         {
-            if (s.Enabled) _main.TogglePrivacyShield(s.Name, false);
+            if (s.Blocked != false) _main.TogglePrivacyShield(s.Name, false);
         }
         UpdateCount();
-        StatusText = "Restored Windows default telemetry settings.";
+        StatusText = $"{BlockedCount} settings remain off. This sets values on; use History to restore previous values.";
     }
 }

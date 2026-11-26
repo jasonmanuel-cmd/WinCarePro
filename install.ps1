@@ -52,7 +52,7 @@ if ($Uninstall) {
 # Prefer the published single-file build; fall back to the Release output.
 $source = Join-Path $PSScriptRoot 'publish\WinCare Pro.exe'
 if (-not (Test-Path $source)) {
-    $source = Join-Path $PSScriptRoot 'bin\Release\net8.0-windows\WinCare Pro.exe'
+    $source = Join-Path $PSScriptRoot 'bin\Release\net10.0-windows\WinCare Pro.exe'
 }
 if (-not (Test-Path $source)) {
     throw "No build found. Run .\build-release.ps1 first."

@@ -1,8 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using WinCareDesktop.Services;
+
 
 namespace WinCareDesktop.Services;
 
@@ -31,7 +30,7 @@ public static class EnvironmentReport
             var elevated = SystemOptimizerService.IsElevated();
             var dpi = GetDpiContext();
             var tooling = GetToolingPresence();
-            var standby = NativeMethodsSupport.StandbyTryProbe();
+
 
             return $"""
 WinCare Pro environment report
@@ -40,14 +39,12 @@ Generated: {DateTime.UtcNow:O}
 OS: {os.VersionString} ({(is64 ? "x64" : "x86")})
 Elevated: {elevated}
 DPI awareness: {dpi}
-Standby flush (EmptyStandbyList/psapi): {standby}
+Memory maintenance: WinCare working-set trim only (not probed)
 
 Windows tooling:
 {tooling}
 
-History file: {Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "WinCarePro", "history.json")}
+History file: {new HistoryStore().FilePath}
 """;
         }
         catch (Exception ex)
@@ -101,26 +98,5 @@ History file: {Path.Combine(
             catch { /* ignore malformed PATH segments */ }
         }
         return null;
-    }
-}
-
-internal static class NativeMethodsSupport
-{
-    public static string StandbyTryProbe()
-    {
-        // A cheap, non-mutating probe: can we open psapi and does the
-        // MemoryCompression process exist?
-        try
-        {
-            var proc = System.Diagnostics.Process.GetProcessesByName("MemoryCompression")
-                .FirstOrDefault()
-                ?? System.Diagnostics.Process.GetProcessesByName("Memory Compression")
-                .FirstOrDefault();
-            return proc is null ? "MemoryCompression process not found (likely needs elevation)" : "MemoryCompression process found";
-        }
-        catch
-        {
-            return "probe failed";
-        }
     }
 }

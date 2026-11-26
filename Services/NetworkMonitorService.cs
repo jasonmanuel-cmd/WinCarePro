@@ -4,6 +4,7 @@ namespace WinCareDesktop.Services;
 
 public class NetworkInterfaceInfo
 {
+    public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
@@ -35,6 +36,7 @@ public class NetworkMonitorService
                 var stats = ni.GetIPStatistics();
                 list.Add(new NetworkInterfaceInfo
                 {
+                    Id = ni.Id,
                     Name = ni.Name,
                     Description = ni.Description,
                     Status = ni.OperationalStatus.ToString(),

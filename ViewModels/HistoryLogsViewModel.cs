@@ -19,15 +19,20 @@ public partial class HistoryLogsViewModel : ViewModelBase
     {
         _main = main;
         Title = "Undo History & Event Log";
-        Subtitle = "Review all modifications made by WinCare Pro and cleanly rollback any action with one click";
+        Subtitle = "Review outcomes; only verified privacy and DNS recovery records offer undo";
     }
 
+    public override void OnNavigatedTo() => _main.LoadUndoHistory();
+
     [RelayCommand]
-    public void Rollback(OptimizationTransaction? tx)
+    public async Task Rollback(OptimizationTransaction? tx)
     {
         if (tx == null) return;
-        _main.RevertTransactionCommand.Execute(tx);
-        StatusText = $"Rolled back: {tx.Title}";
+        StatusText = "Restoring; awaiting verified completion...";
+        await _main.RevertTransactionCommand.ExecuteAsync(tx);
+        StatusText = _main.LastRevertMessage;
+        _main.RefreshPrivacyState();
+        _main.SyncDnsFromSystem();
     }
 
     [RelayCommand]

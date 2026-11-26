@@ -24,8 +24,9 @@
                 <StackPanel Grid.Row="0" Margin="0,0,0,12">
                     <TextBlock Text="Undo Transaction History" FontSize="15" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,2" />
-                    <TextBlock Text="Every action taken by WinCare Pro is logged here. Reversible actions can be restored with a single click."
-                               FontSize="12" Foreground="{DynamicResource TextSecondary}" />
+                    <TextBlock Text="Cleanup, uninstall, power plan, startup, privacy and DNS records. Only supported recovery data offers undo; conflicts are refused."
+                               FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="{DynamicResource TextSecondary}" />
                 </StackPanel>
 
                 <!-- Transactions List -->
@@ -86,11 +87,17 @@
                                            Foreground="{DynamicResource Primary}" />
 
                                 <!-- Rollback Button -->
-                                <Button Grid.Column="3" Content="↩ Rollback"
+                                <Button Grid.Column="3"
+                                        AutomationProperties.Name="{Binding Title, StringFormat=Rollback {0}}"
                                         Command="{Binding DataContext.RollbackCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}"
                                         IsEnabled="{Binding Reversable}"
-                                        Padding="10,6" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                        Padding="10,6" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE7A7;" FontFamily="{DynamicResource IconFont}" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="Rollback" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -109,7 +116,7 @@
         <!-- ══ LIVE SYSTEM LOG VIEWER ════════════════════════════════ -->
         <Border Grid.Row="2" Style="{DynamicResource Card}" Background="#0F172A" Padding="14">
             <ListBox ItemsSource="{Binding Logs}" Background="Transparent" BorderThickness="0"
-                     FontFamily="{DynamicResource MonoFont}" FontSize="11" Foreground="#38BDF8">
+                     FontFamily="{DynamicResource MonoFont}" FontSize="11" Foreground="#5EEAD4">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Padding" Value="0,2" />

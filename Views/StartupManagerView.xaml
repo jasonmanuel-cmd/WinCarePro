@@ -4,7 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:WinCareDesktop.ViewModels"
-             mc:Ignorable="d" 
+             mc:Ignorable="d"
              d:DesignHeight="700" d:DesignWidth="900">
     <Grid Margin="0,0,10,20">
         <Grid.RowDefinitions>
@@ -12,29 +12,48 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- ══ TOP BAR & REFRESH ═════════════════════════════════════ -->
+        <!-- ══ TOP BAR, FILTER & REFRESH ═════════════════════════════ -->
         <Border Grid.Row="0" Style="{DynamicResource Card}" Padding="16" Margin="0,0,0,14">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0">
-                    <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
-                    <TextBlock Text="Disabling unneeded startup programs can dramatically reduce Windows boot time and free up background memory."
-                               FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
-                </StackPanel>
+                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                        <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4" />
+                        <TextBlock Text="Disabling unneeded high-impact startup programs cuts Windows login delay and prevents background apps from holding hundreds of MBs of RAM idle."
+                                   FontSize="12" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
+                    </StackPanel>
 
-                <Button Grid.Column="1" Content="🔄 Refresh" Command="{Binding RefreshCommand}"
-                        Padding="14,8" VerticalAlignment="Center" />
-            </Grid>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource PrimaryLight}" CornerRadius="6" Padding="10,6" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ImpactSummary}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Primary}" />
+                        </Border>
+                        <Button Command="{Binding RefreshCommand}"
+                                AutomationProperties.Name="Refresh startup applications"
+                                Padding="14,8" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE72C;" FontFamily="{DynamicResource IconFont}" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="Refresh" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                         Padding="10,7" FontSize="12" Margin="0,12,0,0"
+                         Background="{DynamicResource SurfaceHover}" BorderBrush="{DynamicResource Hairline}"
+                         AutomationProperties.Name="Filter startup programs"
+                         ToolTip="Filter startup entries by name, command, impact, or registry location" />
+            </StackPanel>
         </Border>
 
         <!-- ══ STARTUP ENTRIES LIST ══════════════════════════════════ -->
         <Border Grid.Row="1" Style="{DynamicResource Card}" Padding="0">
-            <ListBox ItemsSource="{Binding Entries}" Background="Transparent" BorderThickness="0"
+            <ListBox ItemsSource="{Binding DisplayedEntries}" Background="Transparent" BorderThickness="0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
@@ -64,7 +83,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="120" />
-                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="105" />
                                 <ColumnDefinition Width="110" />
                             </Grid.ColumnDefinitions>
 
@@ -91,6 +110,7 @@
 
                             <!-- Toggle Status Button -->
                             <Button Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="{Binding Name, StringFormat=Toggle startup item {0}}"
                                     Command="{Binding DataContext.ToggleItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     CommandParameter="{Binding}"
                                     Padding="12,6">

@@ -15,16 +15,21 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- ── Palette ──────────────────────────────────────────────────── -->
+    <!-- ── Palette (Option 3 Teal) ──────────────────────────────────── -->
+    <Color x:Key="PrimaryBrightColor">#0D9488</Color>
     <Color x:Key="PrimaryColor">#0F766E</Color>
     <Color x:Key="PrimaryDarkColor">#115E59</Color>
-    <Color x:Key="PrimaryLightColor">#CCFBF0</Color>
+    <Color x:Key="PrimaryDeepColor">#134E4A</Color>
+    <Color x:Key="PrimaryLightColor">#E6F4F1</Color>
 
-    <SolidColorBrush x:Key="BgBrush"        Color="#EEF2F7" />
+    <SolidColorBrush x:Key="BgBrush"        Color="#F1F5F9" />
     <SolidColorBrush x:Key="Surface"        Color="#FFFFFF" />
     <SolidColorBrush x:Key="SurfaceHover"   Color="#F8FAFC" />
+    <SolidColorBrush x:Key="PrimaryBright"  Color="{DynamicResource PrimaryBrightColor}" />
     <SolidColorBrush x:Key="Primary"        Color="{DynamicResource PrimaryColor}" />
+    <SolidColorBrush x:Key="PrimaryButtonBg" Color="{DynamicResource PrimaryColor}" />
     <SolidColorBrush x:Key="PrimaryDark"    Color="{DynamicResource PrimaryDarkColor}" />
+    <SolidColorBrush x:Key="PrimaryDeep"    Color="{DynamicResource PrimaryDeepColor}" />
     <SolidColorBrush x:Key="PrimaryLight"   Color="{DynamicResource PrimaryLightColor}" />
     <SolidColorBrush x:Key="TextPrimary"    Color="#0F172A" />
     <SolidColorBrush x:Key="TextSecondary"  Color="#475569" />
@@ -37,9 +42,20 @@
     -->
     <SolidColorBrush x:Key="TextTertiary"   Color="#5B6B80" />
     <SolidColorBrush x:Key="Hairline"       Color="#E2E8F0" />
+    <SolidColorBrush x:Key="CardBorderBrush" Color="#CBD5E1" />
     <SolidColorBrush x:Key="Success"        Color="#047857" />
     <SolidColorBrush x:Key="Warning"        Color="#B45309" />
     <SolidColorBrush x:Key="Error"          Color="#DC2626" />
+
+    <!-- Flight-Deck Obsidian Bridge Shell Accents -->
+    <SolidColorBrush x:Key="FlightDeckDeep"    Color="#0B1120" />
+    <SolidColorBrush x:Key="FlightDeckSurface" Color="#0F172A" />
+    <SolidColorBrush x:Key="FlightDeckPod"     Color="#172033" />
+    <SolidColorBrush x:Key="FlightDeckBorder"  Color="#1E293B" />
+    <SolidColorBrush x:Key="FlightDeckCyan"    Color="#2DD4BF" />
+    <SolidColorBrush x:Key="FlightDeckTealBd"  Color="#14B8A6" />
+    <SolidColorBrush x:Key="FlightDeckText"    Color="#F8FAFC" />
+    <SolidColorBrush x:Key="FlightDeckMuted"   Color="#94A3B8" />
 
     <FontFamily x:Key="SansFont">Segoe UI, Helvetica Neue, Arial, sans-serif</FontFamily>
     <!-- Tabular figures so numbers do not jitter as they update. -->
@@ -47,6 +63,8 @@
     <!-- Segoe UI has no colour glyphs for emoji code points, so icon TextBlocks
          must ask for the emoji font explicitly or they render blank. -->
     <FontFamily x:Key="EmojiFont">Segoe UI Emoji</FontFamily>
+    <!-- Uniform monochrome system iconography across Windows 11 & Windows 10. -->
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <!-- ── Text ─────────────────────────────────────────────────────── -->
     <Style x:Key="BodyText" TargetType="TextBlock">
@@ -103,13 +121,13 @@
 
     <Style x:Key="Card" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Surface}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="CornerRadius" Value="10" />
         <Setter Property="Padding" Value="16" />
         <Setter Property="Effect">
             <Setter.Value>
-                <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.07" Color="#000000" />
+                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.05" Color="#0F172A" />
             </Setter.Value>
         </Setter>
         <Style.Triggers>
@@ -139,6 +157,8 @@
         <Setter Property="FontFamily" Value="{DynamicResource SansFont}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="12,8,12,8" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Hand" />
         <!--
             The default WPF focus visual is a dotted rectangle drawn by the OS
@@ -172,7 +192,8 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="8"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -188,7 +209,7 @@
     </Style>
 
     <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="Background" Value="{DynamicResource Primary}" />
+        <Setter Property="Background" Value="{DynamicResource PrimaryButtonBg}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />

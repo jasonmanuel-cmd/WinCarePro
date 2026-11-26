@@ -22,9 +22,14 @@ namespace WinCareDesktop.Services;
 public class AppxService
 {
     private readonly SystemOptimizerService _svc;
+    public Func<string, string, int, (int code, string stdout, string stderr)>? ReadInventoryProcess { get; set; }
 
-    public AppxService(SystemOptimizerService? svc = null)
-        => _svc = svc ?? new SystemOptimizerService();
+    private readonly Func<string, string, int, (int code, string stdout, string stderr)> _run;
+    public AppxService(SystemOptimizerService? svc = null, Func<string, string, int, (int, string, string)>? run = null)
+    {
+        _svc = svc ?? new SystemOptimizerService();
+        _run = run ?? ((file, args, timeout) => { SafetyMode.RequireMutationAllowed(); return _svc.RunProcessPublic(file, args, timeout); });
+    }
 
     /// <summary>
     /// Every non-framework Store app installed for the current user.
@@ -43,7 +48,7 @@ public class AppxService
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         const string script = @"
-$ErrorActionPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
 Get-AppxPackage |
   Where-Object { -not $_.IsFramework -and -not $_.NonRemovable } |
   ForEach-Object {
@@ -58,18 +63,30 @@ Get-AppxPackage |
     }
   } | ConvertTo-Json -Compress";
 
-        var (code, stdout, stderr) = _svc.RunProcessPublic(
+        var (code, stdout, stderr) = (ReadInventoryProcess ?? _svc.RunProcessPublic)(
             "powershell",
             $"-NoProfile -NonInteractive -Command \"{script}\"",
             60000);
 
-        if (code != 0 && stdout.Length == 0)
+        if (code != 0 || !string.IsNullOrWhiteSpace(stderr))
+            throw new System.IO.IOException($"Store app scan incomplete (exit {code}): {stderr.Trim()}");
+        List<AppxRecord> records;
+        try
         {
-            _svc.Log("Store app scan failed: " + stderr.Trim(), "warning");
-            return apps;
+            if (string.IsNullOrWhiteSpace(stdout)) records = new();
+            else
+            {
+                using var json = System.Text.Json.JsonDocument.Parse(stdout);
+                records = json.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<AppxRecord>>(stdout)!
+                    : new() { System.Text.Json.JsonSerializer.Deserialize<AppxRecord>(stdout)! };
+                if (records.Any(r => r == null || string.IsNullOrWhiteSpace(r.Name) || string.IsNullOrWhiteSpace(r.FullName)))
+                    throw new System.IO.IOException("Store app scan returned incomplete package identities.");
+            }
         }
+        catch (System.Text.Json.JsonException ex) { throw new System.IO.IOException("Store app scan returned invalid inventory JSON.", ex); }
 
-        foreach (var item in ParseJson(stdout))
+        foreach (var item in records)
         {
             var name = (item.Name ?? "").Trim();
             var fullName = (item.FullName ?? "").Trim();
@@ -115,15 +132,14 @@ Get-AppxPackage |
         if (string.IsNullOrWhiteSpace(packageFullName))
             return (false, "No package name was supplied.");
 
-        var safe = packageFullName.Replace("'", "");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(packageFullName, @"\A[A-Za-z0-9_.-]+\z")) return (false, "Invalid package identity; nothing changed.");
+        var safe = packageFullName;
 
-        var (code, stdout, stderr) = _svc.RunProcessPublic(
-            "powershell",
-            $"-NoProfile -NonInteractive -Command \"Remove-AppxPackage -Package '{safe}' -ErrorAction Stop\"",
-            120000);
-
-        if (code == 0)
-            return (true, $"Removed {appName}.");
+        var script = $"$ErrorActionPreference='Stop'; $p=Get-AppxPackage | Where-Object {{ $_.PackageFullName -eq '{safe}' }}; if (-not $p) {{ throw 'Package not found before removal' }}; Remove-AppxPackage -Package '{safe}' -ErrorAction Stop; if (Get-AppxPackage | Where-Object {{ $_.PackageFullName -eq '{safe}' }}) {{ throw 'Package remains installed' }}; Write-Output 'WINCARE_REMOVAL_VERIFIED'";
+        var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+        var (code, stdout, stderr) = _run("powershell", $"-NoProfile -NonInteractive -EncodedCommand {encoded}", 120000);
+        if (code == 0 && stdout.Trim() == "WINCARE_REMOVAL_VERIFIED" && string.IsNullOrWhiteSpace(stderr))
+            return (true, $"Removal verified for {appName} (current user).");
 
         var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
         return (false, $"Could not remove {appName}. " +

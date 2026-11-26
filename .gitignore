@@ -2,6 +2,7 @@
 bin/
 obj/
 publish/
+artifacts/
 
 ## Test artefacts
 TestResults/
@@ -46,6 +47,7 @@ msix-stage/
 ## references would be missing from a fresh clone - which fails makeappx
 ## validation at pack time.
 !installer/AppxAssets/*.png
+!installer/StoreListing/*.png
 
 ## Editor / OS noise
 .vs/
@@ -59,6 +61,11 @@ Desktop.ini
 *.pfx
 *.p12
 *.key
+*.pem
+*-private*
+license-pool*.txt
+keys-*.txt
+keys-*.csv
 .env
 .env.local
 appsettings.Development.json

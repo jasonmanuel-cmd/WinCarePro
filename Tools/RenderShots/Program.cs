@@ -19,14 +19,21 @@ namespace RenderShots;
 ///
 /// Usage:  dotnet run --project Tools/RenderShots -- [outputDir]
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     [STAThread]
     private static int Main(string[] args)
     {
-        var outDir = args.Length > 0
+        Environment.SetEnvironmentVariable("WINCARE_SAFE_MODE", "1");
+        Environment.SetEnvironmentVariable("WINCARE_DATA_ROOT", Path.Combine(Path.GetTempPath(), "wincare-render-" + Guid.NewGuid()));
+        var outDir = args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal)
             ? args[0]
             : Path.Combine(Directory.GetCurrentDirectory(), "shots");
+        string? storeListingDir = null;
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--store-listing") storeListingDir = args[i + 1];
+        }
         Directory.CreateDirectory(outDir);
 
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -62,24 +69,55 @@ internal static class Program
         Pump();
 
         
-        Shot(Client(window), outDir, "01-main");
+        foreach (var item in vm.NavigationItems)
+        {
+            vm.NavigateCommand.Execute(item);
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while ((vm.AppUninstallVM.IsLoading || vm.DiskAnalyzerVM.IsScanning || vm.DashboardVM.Diagnostics.IsScanning) && DateTime.UtcNow < deadline) { Pump(); Thread.Sleep(25); }
+            if (vm.AppUninstallVM.IsLoading || vm.DiskAnalyzerVM.IsScanning || vm.DashboardVM.Diagnostics.IsScanning) throw new TimeoutException("View did not finish loading: " + item.Title);
+            window.UpdateLayout(); Pump();
+            Shot(Client(window), outDir, Slug(item.Title));
+        }
 
-        // Sub-screens. Each is a private builder, so drive them the way the
-        // buttons do and capture the overlay.
-        CaptureSub(window, outDir, "02-maintenance-preview", vm, "MaintenancePreview");
-        CaptureSub(window, outDir, "03-diagnostics", vm, "Diagnostics");
-        CaptureSub(window, outDir, "04-system-check", vm, "SystemCheck");
-        CaptureSub(window, outDir, "05-privacy-shield", vm, "PrivacyShield");
-        CaptureSub(window, outDir, "06-removable-apps", vm, "RemovableApps");
-        CaptureSub(window, outDir, "07-ram-network", vm, "RamNetwork");
-        CaptureSub(window, outDir, "08-history-undo", vm, "HistoryUndo");
-        CaptureSub(window, outDir, "09-uninstall-programs", vm, "Uninstall Programs");
+        // Explicitly labelled fixture states: no production mutation adapters are invoked.
+        vm.NavigateCommand.Execute(vm.NavigationItems.Single(n => n.Title == "Privacy Shield"));
+        foreach (var shield in vm.Shields) shield.Blocked = null;
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-privacy-unknown");
 
-        // The three telemetry cards now open their own tool menus.
-        CaptureCard(window, outDir, "10-ram-tools", "RAM Usage");
-        CaptureCard(window, outDir, "11-storage-tools", "Storage");
-        CaptureCard(window, outDir, "12-power-tools", "Power");
+        vm.AppUninstallVM.LoadPrograms = () => new() { new WinCareDesktop.Models.InstalledProgram { Name = "Desktop fixture retained", Publisher = "Safe render fixture" } };
+        vm.AppUninstallVM.LoadStorePrograms = () => throw new IOException("Store inventory fixture denied. Desktop results remain available; this inventory is partial.");
+        vm.NavigateCommand.Execute(vm.NavigationItems.Single(n => n.Title == "App Remover"));
+        var inventory = vm.AppUninstallVM.LoadAppsAsync();
+        while (!inventory.IsCompleted) { Pump(); Thread.Sleep(10); }
+        inventory.GetAwaiter().GetResult();
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-apps-partial");
+        vm.AppUninstallVM.IsLoading = true;
+        vm.AppUninstallVM.StatusText = "Scanning installed applications and Windows Store packages... (safe fixture)";
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-apps-loading");
+        vm.AppUninstallVM.IsLoading = false;
+        vm.AppUninstallVM.IsUninstalling = true;
+        vm.AppUninstallVM.StatusText = "Waiting for fixture uninstaller. Cancel stops waiting, not necessarily the vendor process. No process was started in this fixture.";
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-apps-busy");
+        vm.AppUninstallVM.IsUninstalling = false;
+        vm.AppUninstallVM.StatusText = "0 verified removed; 1 failed; 1 pending; 1 reboot required; 1 unknown; 0 not attempted. Unverified items retained; see History. (safe fixture)";
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-apps-outcomes");
+        vm.AppUninstallVM.DisplayedApps.Clear();
+        vm.AppUninstallVM.StatusText = "No applications in the supplied safe fixture.";
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-apps-empty");
 
+        CaptureRescueFixtures(window, vm, outDir);
+        CaptureActionFixtures(window, vm, outDir);
+        CaptureGuidanceFixtures(window, vm, outDir);
+        if (!string.IsNullOrWhiteSpace(storeListingDir))
+        {
+            CaptureStoreListing(window, vm, storeListingDir!);
+        }
         ReportHoverCoverage(window);
 
         window.Close();
@@ -457,6 +495,143 @@ internal static class Program
         using var fs = File.Create(path);
         encoder.Save(fs);
         Console.WriteLine("  " + name + ".png");
+    }
+
+    private static void CaptureGuidanceFixtures(Window window, MainViewModel vm, string outDir)
+    {
+        // Pure fixtures: never export actual host data or invoke a file dialog.
+        vm.NavigateCommand.Execute(vm.NavigationItems[0]);
+        var sample = new WinCareDesktop.Services.DiagnosticSnapshot(DateTimeOffset.UtcNow, 92, 96, 4, false, null);
+        void Capture(string name, WinCareDesktop.Services.DiagnosticSession session)
+        {
+            vm.CurrentView = new DashboardViewModel(vm, session) { Subtitle = "Synthetic guidance fixture — live cards remain separate observations" };
+            window.UpdateLayout(); Pump();
+            Shot(Client(window), outDir, "fixture-guidance-" + name);
+        }
+        WinCareDesktop.Services.DiagnosticSession Session(WinCareDesktop.Services.DiagnosticSnapshot snapshot) => new(_ => Task.FromResult(snapshot), snapshot);
+        Capture("pressure", Session(sample));
+        Capture("unknown", Session(sample with { RamPercent = null, DiskPercent = null, FreeDiskGb = null, AdvertisingBlocked = null }));
+        Capture("stale", Session(sample with { CapturedAt = DateTimeOffset.UtcNow.AddMinutes(-2) }));
+        Capture("clear", Session(sample with { RamPercent = 40, DiskPercent = 70, FreeDiskGb = 50, AdvertisingBlocked = true, TailoredBlocked = true }));
+        Capture("not-scanned", new(_ => Task.FromResult(sample)));
+        var pending = new TaskCompletionSource<WinCareDesktop.Services.DiagnosticSnapshot>();
+        var busy = new WinCareDesktop.Services.DiagnosticSession(_ => pending.Task);
+        var scan = busy.RescanAsync();
+        Capture("busy", busy);
+        busy.CancelScan(); pending.SetResult(sample);
+        while (!scan.IsCompleted) { Pump(); Thread.Sleep(10); }
+        Capture("cancelled", busy);
+        var failed = new WinCareDesktop.Services.DiagnosticSession(_ => throw new IOException("Synthetic failure"));
+        failed.RescanAsync().GetAwaiter().GetResult();
+        Capture("error", failed);
+        var export = Session(sample);
+        export.PrepareExport();
+        vm.CurrentView = new DashboardViewModel(vm, export) { Subtitle = "Synthetic report preview — no host report written" };
+        window.UpdateLayout(); Pump();
+        All(window).OfType<Border>().Single(b => b.Name == "ExportPreviewPanel").BringIntoView();
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-guidance-export-preview");
+        export.ChooseExportPath = () => "fixture-only-never-written.json";
+        export.WriteExport = (_, _) => throw new IOException("Synthetic denied destination");
+        export.SaveExportAsync().GetAwaiter().GetResult();
+        window.UpdateLayout(); Pump();
+        Shot(Client(window), outDir, "fixture-guidance-export-error");
+    }
+
+    private static void CaptureRescueFixtures(Window window, MainViewModel vm, string outDir)
+    {
+        void Wait(Task task) { var deadline=DateTime.UtcNow.AddSeconds(30); while(!task.IsCompleted && DateTime.UtcNow<deadline) { Pump();Thread.Sleep(10); } if(!task.IsCompleted)throw new TimeoutException("Rescue fixture read did not settle");task.GetAwaiter().GetResult(); }
+        void Capture(string name) {window.UpdateLayout();Pump();Shot(Client(window),outDir,name);}
+        vm.Navigate(vm.NavigationItems.Single(n=>n.Title=="Memory & Apps"));
+        vm.MemoryVM.Subtitle="Synthetic fixture • not host measurements";
+        vm.MemoryVM.Read=_=>Task.FromResult(new WinCareDesktop.Services.MemoryReading(DateTimeOffset.UtcNow,8589934592,7516192768,new[]{new WinCareDesktop.Services.MemoryRow(111,"Optional document editor (fixture)",912,4.2),new WinCareDesktop.Services.MemoryRow(112,"Unknown role — retain (fixture)",620,null)},2,3));
+        Wait(vm.MemoryVM.RefreshAsync()); Capture("fixture-memory-sampled");
+        vm.MemoryVM.Read=_=>throw new IOException("Synthetic denied read");Wait(vm.MemoryVM.RefreshAsync());Capture("fixture-memory-error");
+        var pending=new TaskCompletionSource<WinCareDesktop.Services.MemoryReading>();vm.MemoryVM.Read=_=>pending.Task;
+        var reading=vm.MemoryVM.RefreshAsync();Capture("fixture-memory-busy");vm.MemoryVM.Cancel();pending.SetCanceled();Wait(reading);Capture("fixture-memory-cancelled");
+        vm.Navigate(vm.NavigationItems.Single(n=>n.Title=="Defender"));vm.DefenderVM.Subtitle="Synthetic fixture • not a host protection verdict";
+        foreach(var mode in new[]{"Normal","Passive","","EDR Block Mode"})
+        {
+            vm.DefenderVM.Read=_=>Task.FromResult(new WinCareDesktop.Services.DefenderReading(mode,true,true,DateTimeOffset.UtcNow.AddDays(-2),"fixture"));Wait(vm.DefenderVM.RefreshAsync());Capture("fixture-defender-"+(mode==""?"unknown":Slug(mode)));
+        }
+        vm.DefenderVM.Read=_=>throw new IOException("Synthetic unavailable provider");Wait(vm.DefenderVM.RefreshAsync());Capture("fixture-defender-error");
+        vm.Navigate(vm.NavigationItems.Single(n=>n.Title=="Options"));vm.OptionsVM.Status="Synthetic save failure: previously applied preferences retained. Safe mode blocks writes.";Capture("fixture-options-error");
+        window.Width=980;window.Height=650;
+        foreach(var title in new[]{"Memory & Apps","Defender","Options"}) {vm.Navigate(vm.NavigationItems.Single(n=>n.Title==title));Capture("minimum-"+Slug(title));}
+        window.Width=1180;window.Height=760;
+    }
+
+    private static void CaptureStoreListing(Window window, MainViewModel vm, string storeDir)
+    {
+        Directory.CreateDirectory(storeDir);
+        var prevW = window.Width;
+        var prevH = window.Height;
+        var client = Client(window);
+        client.Width = 1280;
+        client.Height = 800;
+        window.Width = 1320;
+        window.Height = 860;
+        window.UpdateLayout();
+        Pump();
+
+        void StoreShot(string navTitle, string fileName)
+        {
+            vm.NavigateCommand.Execute(vm.NavigationItems.Single(n => n.Title == navTitle));
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while ((vm.AppUninstallVM.IsLoading || vm.DiskAnalyzerVM.IsScanning || vm.DashboardVM.Diagnostics.IsScanning) && DateTime.UtcNow < deadline)
+            {
+                Pump();
+                Thread.Sleep(20);
+            }
+            // Measure and arrange client root at exact 1280x800 (16:10 Store spec)
+            client.Measure(new Size(1280, 800));
+            client.Arrange(new Rect(0, 0, 1280, 800));
+            client.UpdateLayout();
+            Pump();
+
+            var rtb = new RenderTargetBitmap(1280, 800, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(client);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(storeDir, fileName + ".png"));
+            encoder.Save(fs);
+            Console.WriteLine("  store/" + fileName + ".png (1280x800)");
+        }
+
+        // Populate clean representative sample for Memory & Apps before capturing
+        vm.MemoryVM.Read = _ => Task.FromResult(new WinCareDesktop.Services.MemoryReading(
+            DateTimeOffset.UtcNow,
+            17_179_869_184L,
+            9_663_676_416L,
+            new[]
+            {
+                new WinCareDesktop.Services.MemoryRow(4120, "chrome", 1142.4, 3.8),
+                new WinCareDesktop.Services.MemoryRow(6810, "Discord", 584.2, 1.4),
+                new WinCareDesktop.Services.MemoryRow(2944, "Spotify", 412.6, 0.9),
+                new WinCareDesktop.Services.MemoryRow(1820, "MsMpEng", 298.1, 0.4),
+                new WinCareDesktop.Services.MemoryRow(1104, "dwm", 164.0, 0.6),
+            },
+            142,
+            8));
+        var memTask = vm.MemoryVM.RefreshAsync();
+        while (!memTask.IsCompleted) { Pump(); Thread.Sleep(10); }
+
+        StoreShot("Dashboard", "01-dashboard-overview");
+        StoreShot("Memory & Apps", "02-memory-and-cpu-relief");
+        StoreShot("Startup Apps", "03-startup-boot-speed");
+        StoreShot("Disk Analyzer", "04-disk-space-analyzer");
+        StoreShot("Defender", "05-defender-protection");
+        StoreShot("Options", "06-options-and-offline-license");
+
+        vm.OptionsVM.DarkDeck = true;
+        StoreShot("Dashboard", "07-obsidian-dark-deck");
+        vm.OptionsVM.DarkDeck = false;
+
+        client.Width = double.NaN;
+        client.Height = double.NaN;
+        window.Width = prevW;
+        window.Height = prevH;
+        window.UpdateLayout();
     }
 
     private static void Pump()

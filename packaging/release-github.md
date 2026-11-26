@@ -1,74 +1,9 @@
-# WinCare Pro — GitHub release + winget prep
+# GitHub / winget distribution — HOLD / NO_SHIP
 
-## 1. Push the repo to GitHub (one time)
+The old unsigned freeware/build-and-upload instructions are withdrawn. `release-to-github.ps1` now refuses every invocation before any build, git tag, push or GitHub upload. There is no override.
 
-```powershell
-cd C:\Users\blunt\Desktop\wincare-desktop
-git remote add origin https://github.com/jasonmanuel-cmd/WinCarePro.git
-git push -u origin master
-```
+Follow `../RELEASE.md` and `../FINISH-PACKAGING-FIXES.md` for candidate packaging and the unresolved release decisions. Both executable payload and final direct-download package require approved signing and verification, regardless of price. Packaging consumes an explicitly selected existing payload; it does not republish or generate an update-source endpoint.
 
-Create the remote first with:
+The preserved reviewed portable is `artifacts/rescue-reviewed-portable/WinCare Pro.exe` with its sidecars. It remains unsigned and on HOLD. Existing MSI/MSIX and winget manifests are not approved release assets.
 
-```powershell
-gh repo create jasonmanuel-cmd/WinCarePro --public --source . --remote origin
-```
-
-## 2. Cut a GitHub Release
-
-```powershell
-.\release-to-github.ps1 -Version 1.0.0
-```
-
-This publishes the self-contained build, rebuilds the MSI, creates a zip of
-`publish\`, tags `v1.0.0`, and attaches `WinCare.msi` + the zip to the release
-as downloadable assets. The release body comes from `CHANGELOG.md`.
-
-## 3. Update check wiring (handled by the build)
-
-Two files, and it is worth being precise about which is which:
-
-1. **`update-source.txt` ships next to the exe.** One JSON line, no prose:
-
-   ```json
-   { "version": "1.0.0", "url": "https://raw.githubusercontent.com/jasonmanuel-cmd/WinCarePro/master/packaging/version.json" }
-   ```
-
-   `build-installer.ps1` generates this into `publish\` before the MSI harvest
-   and reads the version back out of `WinCare.wxs`, so the two cannot drift. Do
-   not hand-write it — the build wipes `publish\` on every run.
-
-2. **The `url` endpoint serves the version.** That is `packaging\version.json`
-   in this repo:
-
-   ```json
-   { "version": "1.0.0" }
-   ```
-
-   Bump that file when you ship a release.
-
-The app never fetches `update-source.txt` — it reads `url` out of it and fetches
-*that*. Pointing `url` at `github.com/…/releases/latest` will not work: it
-returns an HTML page, and the checker requires JSON with a `version` key.
-
-No server to run — raw.githubusercontent.com is the CDN.
-
-## 4. winget manifest (community repo)
-
-`packaging\winget\` mirrors the three-file layout the winget-pkgs repo expects:
-
-- `WinCare.WinCarePro.yaml` — version + installer + locale combined.
-
-To publish, fork `microsoft/winget-pkgs`, copy the manifest into
-`manifests/w/WinCare/WinCarePro/1.0.0/`, fill in the SHA256 placeholders after
-the release asset is finalized, and open a PR. SHA256 of each asset:
-
-```powershell
-Get-FileHash .\installer\WinCare.msi
-```
-
-## Legal note on unsigned builds
-
-Both the MSI and the exe are unsigned. Windows SmartScreen will warn on first
-run. That is acceptable for v1.0 freeware distribution but not a paid product —
-see RELEASE.md §1 before monetizing.
+Before a future separately authorized release: approve channel/identity/runtime and native acceptance; freeze the complete source and final signed artifact hashes; independently review package extraction/signatures and installation; regenerate winget metadata with actual final version, URL, SHA-256 and per-user MSI scope. Do not run the historical push/upload commands or publish the stale manifests. No release automation beyond the fail-closed HOLD is authorized or implemented by this correction.

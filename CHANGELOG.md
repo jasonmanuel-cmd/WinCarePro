@@ -4,6 +4,20 @@ All notable changes to WinCare Pro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 semantic versioning.
 
+## [2.0.0 — Flight-Deck Complete Edition] - 2026-11-26
+
+Built collaboratively by **Jason Manuel** and **Antigravity (Google DeepMind)** — see [`ANTIGRAVITY_COLLABORATION_NOTES.md`](./ANTIGRAVITY_COLLABORATION_NOTES.md) and [`TOP_30_MAINTENANCE_AUDIT.md`](./TOP_30_MAINTENANCE_AUDIT.md) for the complete architecture chronicle.
+
+### Added
+- **SpaceX-Inspired Flight-Deck Shell & Full Obsidian Dark Deck (`Services/ThemePaletteService.cs`)**: Clean obsidian sidebar & HUD telemetry header (`MEM //`, `FREE //`, `INDEX //`, `AIR-GAPPED // OFFLINE`) plus a live runtime `Full Obsidian Dark Deck` toggle in `Options`, verified for WCAG AA contrast in both modes.
+- **7-Vector Security & Malware Posture Audit (`Services/SecurityThreatAuditService.cs`)**: Read-only audit across `HOSTS` domain redirects, WinINET `PROXY`/`PAC` interception, Windows `FIREWALL` profiles, `UAC` (`EnableLUA`), `SMARTSCREEN`, UEFI `SECUREBOOT`, and `STARTUP` LOLBins / `%TEMP%` droppers, with clipboard report export and 1-click Startup jump.
+- **Suspicious File Triage & Targeted Defender File Scan**: Offline SHA-256 hash, X.509/Authenticode signature, and NTFS Mark-of-the-Web inspection plus confirmed single-file `MpCmdRun.exe` Defender scanning.
+- **Deep Safe Cache Scanner (`Services/DeepCacheScannerService.cs`)**: Snapshot-verified preview and cleanup for browser HTTP/Code/GPU caches (Chrome, Edge, Brave, Firefox — never cookies/passwords), DirectX/NVIDIA/AMD shader caches, thumbcaches, and WER crash dumps while skipping active/locked files.
+- **3-Stage SHA-256 Exact Duplicate File Finder (`Services/DuplicateFileFinderService.cs`)**: Byte-size → 16 KB quick hash → full SHA-256 duplicate discovery (`≥ 1 MB`) with `C:\Windows` block guards and confirmed Recycle Bin removal.
+- **Kernel RAM Probe, Power Boost, Reversible Startup & Hardware/SMART Strip**: Direct Win32 `GlobalMemoryStatusEx` (`Services/NativeMemoryReader.cs`), reversible Power & Responsiveness switcher (`UndoKind.PowerPlan`), high-impact startup sorting & undo (`UndoKind.StartupEntry`), Authenticode-verified graceful app close (`VLC`, `Spotify`, `Discord`, `Steam`, `Epic`), and Dashboard CPU/Uptime/SMART diagnostics.
+- **100% Offline ECDSA P-256 Licensing & Launch Kit**: Air-gapped `WCP2.` license verification (`Services/LicenseService.cs`), `Tools/LicenseGen` CLI, static storefront (`website/`), `MONETIZATION-READY-CHECKLIST.md`, Option 3 vector shield+bolt icons (`Tools/MakeIcon`), and 7 `1280×800` Store screenshots (`installer/StoreListing/`).
+- **946 Automated Verification Gates**: Expanded `WinCareDesktop.Tests` to **902 passing xUnit tests** + **44 passing packaging/signing safety gates** (`packaging/Test-Packaging.ps1`) with `0` compiler warnings (`-warnaserror`).
+
 ## [2.0.0] - 2026-10-14
 
 Complete architectural overhaul and transition to a modern modular MVVM desktop experience.

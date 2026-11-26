@@ -127,6 +127,7 @@ public class PowerService
 
         try
         {
+            SafetyMode.RequireMutationAllowed();
             var target = new Guid(guid);
             var result = PowerSetActiveScheme(IntPtr.Zero, ref target);
 

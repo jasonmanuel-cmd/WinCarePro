@@ -1,7 +1,7 @@
 # WinCare Pro — Project Guidelines & Architecture
 
 ## Overview
-WinCare Pro is a native Windows 10/11 system optimizer, privacy protector, and disk analyzer built in C# .NET 8 (WPF).
+WinCare Pro is a native Windows 10/11 system optimizer, privacy protector, and disk analyzer built in C# .NET 10 (WPF).
 The core design pillars are:
 - **100% Offline & Zero Telemetry:** No background tracking or phone-home requests.
 - **Single-File Self-Contained:** Runs without external runtime requirements (`win-x64`).

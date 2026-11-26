@@ -15,9 +15,13 @@ public class SystemOptimizerService
     /// %LOCALAPPDATA%\WinCarePro\history.json. Without this, running the test
     /// suite appended its own transactions to the user's actual undo history.
     /// </summary>
-    public SystemOptimizerService(HistoryStore? history = null)
+    private readonly Func<string, int?> _readPrivacy;
+    private readonly Action<string, int?> _writePrivacy;
+    public SystemOptimizerService(HistoryStore? history = null, Func<string, int?>? readPrivacy = null, Action<string, int?>? writePrivacy = null)
     {
         _history = history ?? new HistoryStore();
+        _readPrivacy = readPrivacy ?? ReadPrivacyValue;
+        _writePrivacy = writePrivacy ?? WritePrivacyValue;
     }
 
     public string HistoryFilePath => _history.FilePath;
@@ -36,13 +40,27 @@ public class SystemOptimizerService
     {
         try
         {
-            var mc = new ManagementObjectSearcher("SELECT * FROM Win32_OperatingSystem");
+            // GlobalMemoryStatusEx reads physical RAM directly from the kernel in
+            // ~2 microseconds without waking WmiPrvSE.exe or allocating COM objects.
+            var mem = new NativeMethods.MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<NativeMethods.MEMORYSTATUSEX>() };
+            if (NativeMethods.GlobalMemoryStatusEx(ref mem) && mem.ullTotalPhys > 0)
+            {
+                var total = (long)Math.Min(mem.ullTotalPhys, long.MaxValue);
+                var free = (long)Math.Min(mem.ullAvailPhys, (ulong)total);
+                var usedPct = (double)(total - free) / total * 100.0;
+                return (Math.Round(usedPct, 1), total, free);
+            }
+
+            using var mc = new ManagementObjectSearcher("SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem");
             foreach (var mo in mc.Get())
             {
-                var total = Convert.ToInt64(mo["TotalVisibleMemorySize"]) * 1024;
-                var free  = Convert.ToInt64(mo["FreePhysicalMemory"]) * 1024;
-                var usedPct = total > 0 ? (double)(total - free) / total * 100 : 0;
-                return (Math.Round(usedPct, 1), total, free);
+                using (mo)
+                {
+                    var total = Convert.ToInt64(mo["TotalVisibleMemorySize"]) * 1024;
+                    var free  = Convert.ToInt64(mo["FreePhysicalMemory"]) * 1024;
+                    var usedPct = total > 0 ? (double)(total - free) / total * 100 : 0;
+                    return (Math.Round(usedPct, 1), total, free);
+                }
             }
         }
         catch (Exception ex) { Log($"RAM query failed: {ex.Message}", "warning"); }
@@ -66,6 +84,7 @@ public class SystemOptimizerService
 
     public void FlushDnsCache()
     {
+        SafetyMode.RequireMutationAllowed();
         var (code, _, err) = RunProcess("ipconfig", "/flushdns");
         Log(code == 0 ? "DNS cache flushed." : $"DNS cache flush failed: {err}".Trim(), code == 0 ? "success" : "warning");
     }
@@ -77,28 +96,21 @@ public class SystemOptimizerService
         return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
     }
 
+    public Func<bool>? WorkingSetTrimmer { get; set; }
     public void FlushStandbyMemory()
     {
-        // Try the real thing first. EmptyStandbyList genuinely drops the
-        // standby list; the old code only ever trimmed *this* process's
-        // working set and then logged "Standby list flushed", which was false.
-        if (NativeMethods.TryEmptyStandbyList())
-        {
-            Log("Standby memory list flushed (EmptyStandbyList).", "success");
-            return;
-        }
-
         try
         {
-            var hProcess = NativeMethods.GetCurrentProcess();
-            NativeMethods.SetProcessWorkingSetSize(hProcess, NativeMethods.Constants.MinWorkingSet, NativeMethods.Constants.MaxWorkingSet);
-            NativeMethods.CloseHandle(hProcess);
-            Log("Trimmed this process's working set. Full standby flush needs Administrator (EmptyStandbyList was unavailable).", "warning");
+            bool success;
+            if (WorkingSetTrimmer != null) success = WorkingSetTrimmer();
+            else
+            {
+                SafetyMode.RequireMutationAllowed();
+                success = NativeMethods.SetProcessWorkingSetSize(NativeMethods.GetCurrentProcess(), new IntPtr(-1), new IntPtr(-1));
+            }
+            Log(success ? "Trimmed WinCare's own working set. This does not flush the system standby list or create memory." : "Working-set trim failed.", success ? "success" : "warning");
         }
-        catch (Exception ex)
-        {
-            Log($"Working set trim failed: {ex.Message}", "warning");
-        }
+        catch (Exception ex) { Log("Working-set trim failed: " + ex.Message, "warning"); }
     }
 
     /// <summary>
@@ -114,6 +126,7 @@ public class SystemOptimizerService
     /// </remarks>
     public bool TrimProcessWorkingSet(int pid)
     {
+        SafetyMode.RequireMutationAllowed();
         IntPtr handle = IntPtr.Zero;
         try
         {
@@ -203,74 +216,65 @@ public class SystemOptimizerService
     /// Read-only scan. Returns what a cleanup would remove without touching
     /// anything, so the UI can show a preview before the user commits.
     /// </summary>
+    public string[] CleanupRoots { get; set; } = SafetyMode.Enabled ? Array.Empty<string>() : TempRoots().ToArray();
+
     public List<CleanupCandidate> ScanTempForCleanup()
     {
         var results = new List<CleanupCandidate>();
-        foreach (var root in TempRoots())
+        CleanupCandidate Capture(string path)
         {
-            string[] children;
-            try { children = Directory.GetFileSystemEntries(root); }
-            catch { continue; }
-
-            foreach (var child in children)
+            PathSafety.RejectReparsePoints(path);
+            if (Directory.Exists(path))
             {
-                try
-                {
-                    var isDir = Directory.Exists(child);
-                    var bytes = isDir ? DirectorySize(child) : new FileInfo(child).Length;
-                    if (bytes <= 0) continue;
-                    results.Add(new CleanupCandidate
-                    {
-                        Path = child,
-                        Bytes = bytes,
-                        Category = Path.GetFileName(root).Equals("Temp", StringComparison.OrdinalIgnoreCase)
-                            ? "User temp"
-                            : "System temp",
-                        IsDirectory = isDir
-                    });
-                }
-                catch { }
+                var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Take(10001).Select(Capture).ToList();
+                if (files.Count > 10000) throw new IOException("Preview bound exceeded; choose a smaller scope.");
+                return new CleanupCandidate { Path = path, IsDirectory = true, Bytes = files.Sum(f => f.Bytes), Snapshot = files, Category = "Temporary files (snapshot)" };
             }
+            var f = new FileInfo(path);
+            return new CleanupCandidate { Path = f.FullName, Bytes = f.Length, LastWriteUtc = f.LastWriteTimeUtc, CreatedUtc = f.CreationTimeUtc, Category = "Temporary file" };
+        }
+        foreach (var root in CleanupRoots)
+        {
+            try
+            {
+                PathSafety.RejectReparsePoints(root);
+                foreach (var child in Directory.GetFileSystemEntries(root))
+                    try { results.Add(Capture(child)); } catch (Exception ex) { Log($"Preview skipped {child}: {ex.Message}", "warning"); }
+            }
+            catch (Exception ex) { Log($"Preview skipped {root}: {ex.Message}", "warning"); }
         }
         return results.OrderByDescending(c => c.Bytes).ToList();
     }
 
-    /// <summary>
-    /// Deletes only the supplied candidates. Takes the list explicitly rather
-    /// than re-scanning, so the user deletes exactly what they were shown.
-    /// </summary>
+    public int LastCleanupErrors { get; private set; }
+
     public long CleanTempAndCache(IEnumerable<CleanupCandidate>? candidates = null)
     {
-        if (candidates == null)
-        {
-            Log("Scanning temp folders and system caches...", "system");
-            candidates = ScanTempForCleanup();
-        }
-
+        LastCleanupErrors = 0;
         long reclaimedBytes = 0;
-        foreach (var c in candidates)
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in candidates ?? Array.Empty<CleanupCandidate>())
         {
-            try
+            var files = candidate.IsDirectory ? candidate.Snapshot ?? new List<CleanupCandidate>() : new List<CleanupCandidate> { candidate };
+            if (candidate.IsDirectory && candidate.Snapshot == null) { LastCleanupErrors++; Log($"Missing confirmed snapshot: {candidate.Path}", "warning"); }
+            foreach (var file in files)
             {
-                if (c.IsDirectory)
+                try
                 {
-                    if (!Directory.Exists(c.Path)) continue;
-                    reclaimedBytes += DirectorySize(c.Path);
-                    Directory.Delete(c.Path, true);
+                    var path = Path.GetFullPath(file.Path);
+                    if (!seen.Add(path)) continue;
+                    if (!CleanupRoots.Any(root => PathSafety.IsWithin(path, root))) throw new IOException("Outside approved temporary roots.");
+                    PathSafety.RejectReparsePoints(path);
+                    var info = new FileInfo(path);
+                    if (!info.Exists) continue;
+                    if (file.LastWriteUtc == null || info.Length != file.Bytes || info.LastWriteTimeUtc != file.LastWriteUtc || info.CreationTimeUtc != file.CreatedUtc) throw new IOException("File changed since preview; scan again.");
+                    File.Delete(path);
+                    reclaimedBytes += file.Bytes;
                 }
-                else
-                {
-                    if (!File.Exists(c.Path)) continue;
-                    var len = new FileInfo(c.Path).Length;
-                    File.Delete(c.Path);
-                    reclaimedBytes += len;
-                }
+                catch (Exception ex) { LastCleanupErrors++; Log($"Cleanup skipped {file.Path}: {ex.Message}", "warning"); }
             }
-            catch { /* locked / in use — expected for anything running */ }
         }
-
-        var reclaimedGb = Math.Round(reclaimedBytes / 1_073_741_824.0, 2);
-        Log($"Reclaimed {reclaimedGb} GB from {candidates.Count()} temp/cache item(s).", "success");
+        Log($"Removed {reclaimedBytes} bytes; {LastCleanupErrors} error(s). Empty directories are retained.", LastCleanupErrors == 0 ? "success" : "warning");
         return reclaimedBytes;
     }
 
@@ -305,39 +309,26 @@ public class SystemOptimizerService
     // ── DNS ──────────────────────────────────────────────────────────────
     public string CurrentDns { get; private set; } = "System default";
 
+    public string? SelectedDnsAdapterId { get; set; }
     public bool SetDns(string dnsIp, string dnsName)
     {
-        Log($"Attempting DNS switch to {dnsName} ({dnsIp})...", "system");
-        var iface = GetActiveNetworkInterface();
-        if (string.IsNullOrWhiteSpace(iface))
-        {
-            Log("No active network adapter found.", "warning");
-            return false;
-        }
-        var (code, _, err) = RunProcess("netsh", $"interface ip set dns name=\"{iface}\" source=static addr={dnsIp}");
-        if (code == 0)
-        {
-            CurrentDns = dnsName;
-            Log($"DNS set to {dnsName} ({dnsIp}) on {iface}.", "success");
-            return true;
-        }
-        Log($"DNS change failed (exit {code}). Administrator rights are required. {err}".Trim(), "warning");
-        return false;
+        if (string.IsNullOrWhiteSpace(SelectedDnsAdapterId)) { Log("Select a specific adapter before changing IPv4 DNS.", "warning"); return false; }
+        var service = new DnsSettingsService(this);
+        var ok = service.Change(SelectedDnsAdapterId, dnsIp);
+        Log(service.LastMessage, ok ? "success" : "warning");
+        if (ok) CurrentDns = dnsName;
+        return ok;
     }
 
     public string? ReadActiveDnsIp()
     {
         try
         {
-            var mos = new ManagementObjectSearcher("SELECT DNSServerSearchOrder FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=true");
-            foreach (var mo in mos.Get())
-            {
-                if (mo["DNSServerSearchOrder"] is string[] servers && servers.Length > 0)
-                    return servers[0];
-            }
+            var interfaces = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up && n.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback).ToList();
+            var adapter = SelectedDnsAdapterId != null ? interfaces.FirstOrDefault(n => n.Id == SelectedDnsAdapterId) : interfaces.Count == 1 ? interfaces[0] : null;
+            return adapter?.GetIPProperties().DnsAddresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.ToString();
         }
-        catch (Exception ex) { Log($"DNS read failed: {ex.Message}", "warning"); }
-        return null;
+        catch (Exception ex) { Log("DNS read failed: " + ex.Message, "warning"); return null; }
     }
 
     public (string name, string ip, bool matched) MatchCurrentDns(IEnumerable<(string name, string ip)> known)
@@ -397,69 +388,62 @@ public class SystemOptimizerService
         return (proc.ExitCode, stdoutTask.Result, stderrTask.Result);
     }
 
-    private string GetActiveNetworkInterface()
-    {
-        try
-        {
-            var mos = new ManagementObjectSearcher("SELECT NetConnectionID, IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=true");
-            foreach (var mo in mos.Get())
-            {
-                if (mo["IPAddress"] is string[] ips && ips.Length > 0)
-                {
-                    var id = mo["NetConnectionID"]?.ToString();
-                    if (!string.IsNullOrWhiteSpace(id)) return id;
-                }
-            }
-        }
-        catch { /* fall through */ }
-        return "";
-    }
+
 
     // ── TRACKER / PRIVACY ────────────────────────────────────────────────
     public int TrackersBlocked { get; set; }
 
-    public bool ReadAdvertisingIdBlocked()
+    private static (string Path, string Name) PrivacyKey(string setting) => setting switch
     {
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo");
-            return key?.GetValue("Enabled") is int v && v == 0;
-        }
-        catch { return false; }
+        "Advertising ID" => (@"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled"),
+        "Tailored Experiences" => (@"Software\Microsoft\Windows\CurrentVersion\Privacy", "TailoredExperiencesWithDiagnosticDataEnabled"),
+        _ => throw new ArgumentException("Unsupported privacy setting.")
+    };
+
+    private static int? ReadPrivacyValue(string setting)
+    {
+        var (path, name) = PrivacyKey(setting);
+        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(path);
+        var value = key?.GetValue(name);
+        if (value == null) return null;
+        if (value is not int n || key!.GetValueKind(name) != Microsoft.Win32.RegistryValueKind.DWord) throw new IOException("Unexpected registry value type; no change made.");
+        return n;
     }
 
-    public bool ReadTailoredExperiencesOff()
+    private static void WritePrivacyValue(string setting, int? value)
     {
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Privacy");
-            return key?.GetValue("TailoredExperiencesWithDiagnosticDataEnabled") is int v && v == 0;
-        }
-        catch { return false; }
+        SafetyMode.RequireMutationAllowed();
+        var (path, name) = PrivacyKey(setting);
+        using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(path);
+        if (value == null) key.DeleteValue(name, false);
+        else key.SetValue(name, value.Value, Microsoft.Win32.RegistryValueKind.DWord);
     }
+
+    public bool? ReadPrivacyState(string setting)
+    {
+        try { return _readPrivacy(setting) switch { 0 => true, 1 => false, _ => null }; }
+        catch (Exception ex) { Log($"{setting} state unknown: {ex.Message}", "warning"); return null; }
+    }
+    public bool ReadAdvertisingIdBlocked() => ReadPrivacyState("Advertising ID") == true;
+    public bool ReadTailoredExperiencesOff() => ReadPrivacyState("Tailored Experiences") == true;
 
     public bool ApplyPrivacySetting(string trackerType, bool enable)
     {
         try
         {
-            if (trackerType is "Advertising ID" or "Background Tracking")
-            {
-                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo");
-                key?.SetValue("Enabled", enable ? 0 : 1, Microsoft.Win32.RegistryValueKind.DWord);
-            }
-            else
-            {
-                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Privacy");
-                key?.SetValue("TailoredExperiencesWithDiagnosticDataEnabled", enable ? 0 : 1, Microsoft.Win32.RegistryValueKind.DWord);
-            }
-            ToggleTrackerBlock(trackerType, enable);
+            _ = PrivacyKey(trackerType);
+            var before = _readPrivacy(trackerType);
+            var desired = enable ? 0 : 1;
+            if (before == desired) return true;
+            // Save exact prior DWORD or absence before changing anything.
+            var tx = new OptimizationTransaction { Title = $"Privacy: {trackerType}", Description = "Previous value captured; readback required.", Kind = UndoKind.PrivacyRegistry, UndoPayload = $"v3|{trackerType}|{(before.HasValue ? before.Value.ToString() : "absent")}|{desired}", Time = DateTime.Now };
+            PushUndoTransaction(tx);
+            _writePrivacy(trackerType, desired);
+            if (_readPrivacy(trackerType) != desired) throw new IOException("Registry readback did not match requested state.");
+            Log($"Updated {trackerType}; verified by readback.", "success");
             return true;
         }
-        catch (Exception ex)
-        {
-            Log($"Privacy change failed for {trackerType}: {ex.Message}", "warning");
-            return false;
-        }
+        catch (Exception ex) { Log($"Privacy change failed for {trackerType}: {ex.Message}", "warning"); return false; }
     }
 
     public void ToggleTrackerBlock(string trackerType, bool enable)
@@ -484,9 +468,12 @@ public class SystemOptimizerService
         if (storagePercent >= 90 || freeStorageGb < 20)
             findings.Add($"Disk is tight: {freeStorageGb:F0} GB free ({storagePercent:F0}% used). Clear temp files.");
         else findings.Add($"Disk has room: {freeStorageGb:F0} GB free.");
-        findings.Add(ReadAdvertisingIdBlocked()
-            ? "Advertising ID is already blocked."
-            : "Advertising ID is still on. Turn it off in Privacy Shield.");
+        findings.Add(ReadPrivacyState("Advertising ID") switch
+        {
+            true => "Advertising ID is already blocked.",
+            false => "Advertising ID is still on. Turn it off in Privacy Shield.",
+            null => "Advertising ID state is unknown (unreadable, absent or unsupported value)."
+        });
         if (string.IsNullOrWhiteSpace(ReadActiveDnsIp()))
             findings.Add("DNS is using the network default. Pick Cloudflare, Google, or Quad9 if you want a named resolver.");
         else
@@ -539,7 +526,7 @@ public class SystemOptimizerService
                 {
                     Name = SafeName(p),
                     Pid = p.Id,
-                    WorkingSetMb = Math.Round(p.WorkingSet64 / 1_073_741_824.0, 2)
+                    WorkingSetMb = Math.Round(p.WorkingSet64 / 1_048_576.0, 1)
                 })
                 .ToList();
         }
@@ -576,7 +563,7 @@ public class SystemOptimizerService
                 15000);
             if (code != 0) return result;
 
-            var lines = stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            var lines = stdout.Split(new[] { (char)13, (char)10 }, StringSplitOptions.RemoveEmptyEntries)
                               .Skip(1).ToList();
             if (lines.Count == 0) return result;
 
@@ -639,7 +626,7 @@ public class SystemOptimizerService
             if (code != 0)
                 Log($"App scan failed: {err}".Trim(), "warning");
 
-            foreach (var line in stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Skip(1))
+            foreach (var line in stdout.Split(new[] { (char)13, (char)10 }, StringSplitOptions.RemoveEmptyEntries).Skip(1))
             {
                 var parts = line.Trim().Trim('"').Split(new[] { "\",\"" }, StringSplitOptions.None);
                 if (parts.Length < 2) continue;
@@ -677,17 +664,9 @@ public class SystemOptimizerService
 
     public bool UninstallApp(string packageId, string appName)
     {
-        Log($"Attempting to uninstall: {appName} ({packageId})", "system");
-        if (string.IsNullOrWhiteSpace(packageId)) return false;
-        var safe = packageId.Replace("'", "");
-        var (code, _, err) = RunProcess("powershell", $"-NoProfile -Command \"Get-AppxPackage -Name '{safe}' | Remove-AppxPackage\"", 20000);
-        if (code == 0 && string.IsNullOrWhiteSpace(err))
-        {
-            Log($"Uninstalled {appName}.", "success");
-            return true;
-        }
-        Log($"Uninstall failed for {appName}: {(string.IsNullOrWhiteSpace(err) ? "exit " + code : err.Trim())}", "warning");
-        return false;
+        var result = new AppxService(this).RemoveStoreApp(packageId, appName);
+        Log(result.Message, result.Success ? "success" : "warning");
+        return result.Success;
     }
 
     // ── UNDO HISTORY (persisted to disk) ──────────────────────────────────
@@ -711,8 +690,9 @@ public class SystemOptimizerService
             // Ids must stay unique across restarts, so continue from the max
             // already on disk rather than UndoHistory.Count.
             tx.Id = _undoStack.Count == 0 ? 1 : _undoStack.Max(t => t.Id) + 1;
+            var next = new[] { tx }.Concat(_undoStack).ToList();
+            _history.Save(next);
             _undoStack.Insert(0, tx);
-            _history.Save(_undoStack);
         }
     }
 
@@ -726,6 +706,60 @@ public class SystemOptimizerService
         }
     }
 
+    // ── POWER & RESPONSIVENESS ────────────────────────────────────────────
+    public Func<bool> IsPowerSafeMode { get; set; } = () => SafetyMode.Enabled;
+    public Func<string>? ReadActivePowerGuid { get; set; }
+    public Func<string, (bool Success, string Message)>? WriteActivePowerGuid { get; set; }
+
+    public (bool Success, string Message) ApplyPowerPlan(string targetGuid, string targetName, PowerService? powerService = null)
+    {
+        if (!PowerService.IsKnownPlan(targetGuid))
+            return (false, "Unknown power plan.");
+
+        try
+        {
+            if (IsPowerSafeMode()) throw new InvalidOperationException("Action blocked by WinCare safety mode.");
+            var svc = powerService ?? new PowerService();
+            var readGuid = ReadActivePowerGuid ?? svc.GetActivePlanGuid;
+            var writeGuid = WriteActivePowerGuid ?? svc.SetPowerPlan;
+
+            var normalizedTarget = Guid.Parse(targetGuid.Trim()).ToString("D");
+            var beforeGuid = readGuid();
+            if (string.IsNullOrWhiteSpace(beforeGuid))
+                return (false, "Could not read current power plan before switching; no change made.");
+
+            var normalizedBefore = Guid.Parse(beforeGuid.Trim()).ToString("D");
+            if (string.Equals(normalizedBefore, normalizedTarget, StringComparison.OrdinalIgnoreCase))
+                return (true, $"{targetName} is already the active power plan.");
+
+            var (ok, msg) = writeGuid(normalizedTarget);
+            if (!ok) return (false, msg);
+
+            var afterGuid = readGuid();
+            if (!string.Equals(afterGuid, normalizedTarget, StringComparison.OrdinalIgnoreCase))
+                return (false, "Power plan readback did not match the requested plan.");
+
+            PushUndoTransaction(new OptimizationTransaction
+            {
+                Title = $"Power Plan: {targetName}",
+                Description = $"Switched power scheme to {targetName}; previous scheme captured for rollback.",
+                Kind = UndoKind.PowerPlan,
+                UndoPayload = $"v1|{normalizedBefore}|{normalizedTarget}",
+                Time = DateTime.Now
+            });
+
+            Log($"Power plan switched to {targetName} (verified).", "success");
+            return (true, $"Active power plan set to {targetName}. Undo available in History & Logs.");
+        }
+        catch (Exception ex)
+        {
+            Log($"Power plan change failed: {ex.Message}", "warning");
+            return (false, $"Power plan change blocked or failed: {ex.Message}");
+        }
+    }
+
+    public StartupManagerService? StartupUndoService { get; set; }
+
     /// <summary>
     /// Performs a real reversal where one exists. Returns false when the
     /// transaction is display-only (e.g. deleted temp files), in which case
@@ -737,27 +771,87 @@ public class SystemOptimizerService
         {
             case UndoKind.PrivacyRegistry when !string.IsNullOrEmpty(tx.UndoPayload):
                 var parts = tx.UndoPayload.Split('|');
-                if (parts.Length == 2)
+                if (parts.Length == 4 && parts[0] == "v3")
                 {
-                    var ok = ApplyPrivacySetting(parts[0], parts[1] == "1");
-                    message = ok
-                        ? $"Restored {parts[0]} to its previous value."
-                        : $"Could not restore {parts[0]}. Registry write failed.";
-                    return ok;
+                    try
+                    {
+                        _ = PrivacyKey(parts[1]);
+                        int? previous = parts[2] == "absent" ? null : int.Parse(parts[2]);
+                        if (_readPrivacy(parts[1]) != int.Parse(parts[3])) { message = "Setting changed externally; undo refused to avoid overwriting it."; return false; }
+                        _writePrivacy(parts[1], previous);
+                        var restored = _readPrivacy(parts[1]) == previous;
+                        message = restored ? $"Restored previous {parts[1]} value (verified)." : "Restore readback failed.";
+                        return restored;
+                    }
+                    catch (Exception ex) { message = ex.Message; return false; }
                 }
-                message = "Undo payload was malformed.";
+                message = "Legacy or malformed recovery data cannot safely restore previous state.";
                 return false;
 
-            case UndoKind.ReinstallApp when !string.IsNullOrEmpty(tx.UndoPayload):
-                var (code, _, err) = RunProcess("powershell",
-                    $"-NoProfile -Command \"Get-AppxPackage -Name '{tx.UndoPayload.Replace("'", "")}' | ForEach-Object {{ Add-AppxPackage -Register ('$($_.InstallLocation)\\AppXManifest.xml') -DisableDevelopmentMode }}\"",
-                    30000);
-                if (code == 0)
+            case UndoKind.DnsSettings when !string.IsNullOrEmpty(tx.UndoPayload):
+                var dns = new DnsSettingsService(this);
+                var dnsRestored = dns.Restore(tx.UndoPayload);
+                message = dns.LastMessage;
+                return dnsRestored;
+
+            case UndoKind.PowerPlan when !string.IsNullOrEmpty(tx.UndoPayload):
+                var pParts = tx.UndoPayload.Split('|');
+                if (pParts.Length == 3 && pParts[0] == "v1" && PowerService.IsKnownPlan(pParts[1]) && PowerService.IsKnownPlan(pParts[2]))
                 {
-                    message = $"Reinstalled {tx.UndoPayload}.";
-                    return true;
+                    try
+                    {
+                        if (IsPowerSafeMode()) throw new InvalidOperationException("Action blocked by WinCare safety mode.");
+                        var pSvc = new PowerService();
+                        var readGuid = ReadActivePowerGuid ?? pSvc.GetActivePlanGuid;
+                        var writeGuid = WriteActivePowerGuid ?? pSvc.SetPowerPlan;
+                        var current = readGuid();
+                        if (!string.Equals(current, pParts[2], StringComparison.OrdinalIgnoreCase))
+                        {
+                            message = "Active power plan changed externally; undo refused to avoid overwriting it.";
+                            return false;
+                        }
+                        var (ok, err) = writeGuid(pParts[1]);
+                        if (!ok) { message = err; return false; }
+                        var verified = string.Equals(readGuid(), pParts[1], StringComparison.OrdinalIgnoreCase);
+                        message = verified ? "Restored previous power plan (verified)." : "Power plan restore readback failed.";
+                        return verified;
+                    }
+                    catch (Exception ex) { message = ex.Message; return false; }
                 }
-                message = $"Reinstall failed for {tx.UndoPayload}. {err}".Trim();
+                message = "Malformed power-plan recovery payload.";
+                return false;
+
+            case UndoKind.StartupEntry when !string.IsNullOrEmpty(tx.UndoPayload):
+                var sParts = tx.UndoPayload.Split('|');
+                if (sParts.Length == 5 && sParts[0] == "v1" && bool.TryParse(sParts[3], out var previousEnabled))
+                {
+                    try
+                    {
+                        var location = Uri.UnescapeDataString(sParts[1]);
+                        var entryName = Uri.UnescapeDataString(sParts[2]);
+                        var expectedCmd = Uri.UnescapeDataString(sParts[4]);
+                        var startupSvc = StartupUndoService ?? new StartupManagerService();
+                        var match = startupSvc.GetStartupEntries().FirstOrDefault(e =>
+                            string.Equals(e.Location, location, StringComparison.Ordinal) &&
+                            string.Equals(e.Name, entryName, StringComparison.OrdinalIgnoreCase));
+                        if (match == null || match.IsEnabled == previousEnabled || !string.Equals(match.Command, expectedCmd, StringComparison.Ordinal))
+                        {
+                            message = "Startup entry changed externally or no longer matches; undo refused.";
+                            return false;
+                        }
+                        var toggled = startupSvc.ToggleStartupEntry(match, previousEnabled);
+                        message = toggled
+                            ? $"Restored startup entry '{entryName}' to {(previousEnabled ? "Enabled" : "Disabled")}."
+                            : $"Could not restore startup entry '{entryName}'.";
+                        return toggled;
+                    }
+                    catch (Exception ex) { message = ex.Message; return false; }
+                }
+                message = "Malformed startup recovery payload.";
+                return false;
+
+            case UndoKind.ReinstallApp:
+                message = "App reinstallation is not guaranteed. Use the original installer or Store.";
                 return false;
 
             default:
@@ -769,6 +863,23 @@ public class SystemOptimizerService
 
 internal static partial class NativeMethods
 {
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MEMORYSTATUSEX
+    {
+        public uint dwLength;
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
     [System.Runtime.InteropServices.DllImport("kernel32.dll")]
     public static extern IntPtr GetCurrentProcess();
 
@@ -781,36 +892,7 @@ internal static partial class NativeMethods
     [System.Runtime.InteropServices.DllImport("psapi.dll", SetLastError = true)]
     private static extern bool EmptyWorkingSet(IntPtr hProcess);
 
-    private static bool s_standbySupported;
-    private static bool s_standbyProbed;
 
-    /// <summary>
-    /// Attempts the real standby-list flush via psapi!EmptyWorkingSet on the
-    /// memory compression process. Probes availability once and caches it so
-    /// we do not pay the exception cost on every call.
-    /// </summary>
-    public static bool TryEmptyStandbyList()
-    {
-        if (s_standbyProbed) return s_standbySupported;
-        s_standbyProbed = true;
-        try
-        {
-            // MemoryCompression is the process that actually owns the standby
-            // list on modern Windows. Opening it requires elevation, so a
-            // failure here just means "run as administrator".
-            var proc = System.Diagnostics.Process.GetProcessesByName("Memory Compression")
-                           .FirstOrDefault()
-                        ?? System.Diagnostics.Process.GetProcessesByName("MemoryCompression").FirstOrDefault();
-            if (proc == null) return false;
-            using (proc)
-            {
-                var h = proc.Handle; // forces OpenProcess
-                s_standbySupported = EmptyWorkingSet(h);
-            }
-        }
-        catch { s_standbySupported = false; }
-        return s_standbySupported;
-    }
 
     internal static class Constants
     {
